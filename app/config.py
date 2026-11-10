@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     celery_task_max_retries: int = 5
     celery_retry_base_seconds: int = 10
     celery_retry_max_seconds: int = 3600
+    celery_task_time_limit_seconds: int = 300
     collect_interval_seconds: int = 900
 
     # Extraction (M3). "rules" is the safe default; "llm" is opt-in.

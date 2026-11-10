@@ -86,12 +86,27 @@ The collector only reads channels already registered as active `telegram` source
 
 Required environment: `TELEGRAM_ENABLED=true`, `TELEGRAM_API_ID`, `TELEGRAM_API_HASH`, and `TELEGRAM_SESSION_PATH` (defaults to `var/telegram_collector`, which is git-ignored). A failed run increments `consecutive_failures` and sets an exponential `next_attempt_at`; a subsequent run inside that window skips the source instead of hammering Telegram.
 
+## Background processing
+
+The Celery worker and beat scheduler use Redis as broker and backend. Durable job state, attempt counts, and dead letters live in PostgreSQL (`job_executions`, `dead_letter_jobs`), so a lost broker message cannot lose an accepted job.
+
+```bash
+# In Docker Compose
+docker compose up --build api worker beat
+
+# Locally
+celery -A app.worker.celery_app:celery_app worker --loglevel=INFO --concurrency=1
+celery -A app.worker.celery_app:celery_app beat --loglevel=INFO
+```
+
+Retries are bounded by `CELERY_TASK_MAX_RETRIES` with exponential backoff and jitter. A task that exhausts its retries is written to `dead_letter_jobs` and is not retried again for the same idempotency key. Ingestion replays are idempotent: the same `(source_id, external_id)` produces one row, and a repeated job returns the original result.
+
 ## Next milestones
 
 Status is tracked with evidence in [`docs/audit/MILESTONE_EXECUTION.md`](docs/audit/MILESTONE_EXECUTION.md).
 
 1. ✅ Telegram authorized-channel collector using Telethon.
-2. ⏳ Redis/Celery processing pipeline and retry policy.
+2. ✅ Redis/Celery processing pipeline and retry policy.
 3. ⏳ LLM extraction behind a provider interface with strict Pydantic validation.
 4. ⏳ Admin dashboard integration and authenticated service-to-service access.
 5. ⏳ Telegram publisher with explicit approval and attribution.

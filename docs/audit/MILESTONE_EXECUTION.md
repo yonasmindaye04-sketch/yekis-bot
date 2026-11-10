@@ -93,7 +93,52 @@ Environment: Python 3.15.1 (host; declared target remains 3.12), SQLite used onl
 
 ## M2 — Redis/Celery processing pipeline and retry policy
 
-**Status:** PENDING
+**Status:** IMPLEMENTED AND VERIFIED IN EAGER/TEST MODE; LIVE REDIS BROKER RUN PENDING
+**README item:** 2. Redis/Celery processing pipeline and retry policy.
+
+### Scope delivered
+
+- Celery application (`app/worker/celery_app.py`) with Redis broker/backend, late acknowledgements, `worker_prefetch_multiplier=1`, JSON-only serialization, UTC, soft/hard time limits, and a beat schedule for collection.
+- Durable job state (`job_executions`) with a unique idempotency key, attempt count, status, payload, result, timestamps, and indexed status.
+- Dead-letter table (`dead_letter_jobs`) written in the same transaction as the terminal `dead_lettered` status.
+- Bounded exponential backoff with 10% jitter (`app/services/jobs.py`).
+- `ingest_job` and `collect_job` wrappers; the ingestion wrapper treats a duplicate as success so a replay never creates a second row.
+- Worker and beat services in `docker-compose.yml`; Redis is bound to `127.0.0.1:6382` on the host.
+- Migration `0003_job_pipeline`.
+
+### Executed evidence
+
+| # | Command | Result |
+|---|---|---|
+| 1 | `pytest -q` | **32 passed** |
+| 2 | `alembic upgrade head` on a fresh scratch DB | 0001 → 0002 → 0003 applied |
+| 3 | `alembic check` | `No new upgrade operations detected.` |
+| 4 | `docker compose config -q` | exit 0 |
+
+### Behaviour proven by tests
+
+| Behaviour | Test |
+|---|---|
+| A transient failure is retried and succeeds on attempt 3; one job row, no dead letter | `test_transient_failure_is_retried_then_succeeds_once` |
+| Exhausted retries write exactly one dead-letter row with the error | `test_exhausted_retries_land_in_dead_letter` |
+| A succeeded key returns its stored result and never re-executes | `test_succeeded_key_is_not_executed_again` |
+| A dead-lettered key is not retried without a new key | `test_dead_lettered_key_is_not_retried_without_a_new_key` |
+| A running key is rejected instead of double-executed | `test_running_key_is_not_executed_concurrently` |
+| Ingestion replay produces one post and one opportunity | `test_ingestion_retry_does_not_duplicate_rows` |
+| Backoff is exponential and bounded | `test_retry_delay_is_exponential_and_bounded` |
+| Worker config uses late acks, prefetch 1, JSON, UTC, and a registered beat task | `tests/test_worker_config.py` |
+
+### Not verified (explicitly)
+
+- **A live Redis broker and a real Celery worker process were not started.** The tests prove the retry/idempotency logic and the Celery configuration in eager/test mode. A broker round-trip is an environment step, not a code claim.
+- **PostgreSQL execution.** Same limitation as M1: tests use SQLite; the migration was checked there. Re-run against PostgreSQL 16 before deployment.
+- **Live collection through Celery.** `collect_job` is exercised indirectly through the collector tests; the Celery wrapper itself has not run against a live Telegram session.
+
+### Remaining risk
+
+- A worker crash while a job is `running` will leave that key blocked (the runner refuses concurrent execution). A stale-lock recovery policy is deliberately deferred; add a `started_at` timeout reaper before scaling beyond one worker.
+- Beat runs are not deduplicated across scheduler restarts; the collector's own message-id checkpoint is the safety net.
+- `docker compose config` was checked, but no container was started.
 
 ## M3 — LLM extraction provider with strict Pydantic validation
 
