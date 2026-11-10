@@ -1,0 +1,17 @@
+# Normalize line endings. Without this, Git checks files out with CRLF on
+# Windows, which breaks Linux shebang scripts inside the Docker image
+# ("exec format error") as soon as a container entrypoint is added.
+* text=auto eol=lf
+
+# Binary assets must never be normalized.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+
+# Telegram session files are binary secrets and must never be normalized,
+# diffed, or merged as text.
+*.session binary
+*.session-journal binary
