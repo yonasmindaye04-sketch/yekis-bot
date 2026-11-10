@@ -438,6 +438,7 @@ Startup behavior:
 | `TELEGRAM_ENABLED` | `false` | Gate for the collector CLI/task. |
 | `TELEGRAM_API_ID` | unset | From `my.telegram.org`; environment only. |
 | `TELEGRAM_API_HASH` | unset | From `my.telegram.org`; never commit or log. |
+| `TELEGRAM_BOT_TOKEN` | unset | Optional bot login token from BotFather; the bot must be a member/admin of the target channel. Leave unset for a user account. |
 | `TELEGRAM_SESSION_PATH` | `var/telegram_collector` | Session file path; `var/` and `*.session*` are git-ignored. |
 | `TELEGRAM_FETCH_LIMIT` | `100` | Maximum messages per fetch. |
 

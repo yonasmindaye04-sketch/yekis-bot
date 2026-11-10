@@ -242,7 +242,7 @@ TELEGRAM_SESSION_PATH=var/telegram_collector
 python -m app.integrations.telegram.login
 ```
 
-The session file is a credential. It is git-ignored and must never be copied into an image or a log.
+For a user account, enter the phone number and login code. For a bot, set `TELEGRAM_BOT_TOKEN` first and the command logs in non-interactively; the bot must already be a member/admin of the channels it should read or publish to. The session file is a credential. It is git-ignored and must never be copied into an image or a log.
 
 4. Run a collection:
 

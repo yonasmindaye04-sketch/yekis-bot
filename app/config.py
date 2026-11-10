@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     telegram_enabled: bool = False
     telegram_api_id: int | None = None
     telegram_api_hash: str | None = None
+    # Optional: login as a bot instead of an interactive user session. A bot
+    # token is a credential; keep it in .env/secret storage and never log it.
+    telegram_bot_token: str | None = None
     telegram_session_path: str = "var/telegram_collector"
     telegram_fetch_limit: int = 100
 

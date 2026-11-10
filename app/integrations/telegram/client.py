@@ -47,6 +47,11 @@ class TelethonClient:
             self._settings.telegram_api_id,
             self._settings.telegram_api_hash,
         )
+        if self._settings.telegram_bot_token:
+            # Telethon creates/uses the same session file but signs in as a bot.
+            await self._client.start(bot_token=self._settings.telegram_bot_token)
+            return self._client
+
         await self._client.connect()
         if not await self._client.is_user_authorized():
             await self._client.disconnect()

@@ -28,7 +28,13 @@ async def _login() -> None:
     session_path = Path(settings.telegram_session_path)
     session_path.parent.mkdir(parents=True, exist_ok=True)
     client = TelegramClient(str(session_path), settings.telegram_api_id, settings.telegram_api_hash)
-    await client.start()
+    if settings.telegram_bot_token:
+        # Non-interactive bot login. The bot must already be a member/admin of
+        # the channels it should read or publish to.
+        await client.start(bot_token=settings.telegram_bot_token)
+    else:
+        # Interactive user login: phone number, login code, and 2FA if enabled.
+        await client.start()
     me = await client.get_me()
     print(f"Authorized as {getattr(me, 'username', None) or getattr(me, 'id', 'unknown')}.")
     print(f"Session stored at {session_path} (git-ignored).")

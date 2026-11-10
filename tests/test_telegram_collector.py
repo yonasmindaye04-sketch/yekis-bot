@@ -1,5 +1,7 @@
 import asyncio
 import logging
+import sys
+import types
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -195,6 +197,36 @@ def test_telethon_client_refuses_to_start_without_credentials():
     client = TelethonClient(settings=stub_settings)
     with pytest.raises(TelegramNotConfigured):
         asyncio.run(client.fetch_messages("@channel", 0, 10))
+
+
+def test_telethon_client_uses_bot_token_non_interactively(monkeypatch, tmp_path):
+    class FakeTelegramClient:
+        def __init__(self, *args, **kwargs):
+            self.bot_token = None
+
+        async def start(self, bot_token=None):
+            self.bot_token = bot_token
+
+        async def connect(self):
+            raise AssertionError("the bot-token path must not call connect")
+
+        async def disconnect(self):
+            return None
+
+    monkeypatch.setitem(
+        sys.modules, "telethon", types.SimpleNamespace(TelegramClient=FakeTelegramClient)
+    )
+    stub_settings = types.SimpleNamespace(
+        telegram_api_id=123,
+        telegram_api_hash="hash",
+        telegram_session_path=str(tmp_path / "session"),
+        telegram_bot_token="test-bot-token",
+    )
+    client = TelethonClient(settings=stub_settings)
+
+    asyncio.run(client._ensure_client())
+
+    assert client._client.bot_token == "test-bot-token"
 
 
 def test_backoff_is_bounded_and_increases():
