@@ -1,5 +1,6 @@
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict, Field, HttpUrl
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class SourceCreate(BaseModel):
@@ -13,7 +14,17 @@ class SourceCreate(BaseModel):
 class SourceRead(SourceCreate):
     id: int
     created_at: datetime
+    last_collected_message_id: int | None = None
+    last_attempt_at: datetime | None = None
+    last_success_at: datetime | None = None
+    next_attempt_at: datetime | None = None
+    consecutive_failures: int = 0
+    last_error: str | None = None
     model_config = ConfigDict(from_attributes=True)
+
+
+class SourceStatusUpdate(BaseModel):
+    is_active: bool
 
 
 class ManualIngestion(BaseModel):
@@ -36,6 +47,8 @@ class OpportunityRead(BaseModel):
     remote: bool | None
     description: str | None
     quality_score: int
+    risk_flags: list
+    risk_score: int
     review_status: str
     extraction_method: str
     model_config = ConfigDict(from_attributes=True)
@@ -52,5 +65,13 @@ class PostRead(BaseModel):
     external_id: str
     original_text: str
     original_url: str | None
+    content_hash: str
     collected_at: datetime
     model_config = ConfigDict(from_attributes=True)
+
+    @field_validator("content_hash")
+    @classmethod
+    def hash_is_sha256(cls, value: str) -> str:
+        if len(value) != 64:
+            raise ValueError("content_hash must be a sha256 hex digest")
+        return value

@@ -1,6 +1,6 @@
 """Initial Yekis Intelligence schema."""
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision = "0001_initial"
 down_revision = None
@@ -34,7 +34,13 @@ def upgrade():
     op.create_table(
         "opportunities",
         sa.Column("id", sa.Integer(), primary_key=True),
-        sa.Column("collected_post_id", sa.Integer(), sa.ForeignKey("collected_posts.id"), nullable=False, unique=True),
+        sa.Column(
+            "collected_post_id",
+            sa.Integer(),
+            sa.ForeignKey("collected_posts.id"),
+            nullable=False,
+            unique=True,
+        ),
         sa.Column("opportunity_type", sa.String(40), nullable=False),
         sa.Column("title", sa.String(250), nullable=False),
         sa.Column("category", sa.String(100)),

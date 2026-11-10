@@ -1,5 +1,6 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
+
 from app.config import settings
 
 
@@ -16,4 +17,8 @@ def get_db():
     try:
         yield db
     finally:
+        # Always return the connection to the pool in a clean state. A request
+        # that raised before commit would otherwise leave the pooled connection
+        # in an aborted transaction and poison the next request.
+        db.rollback()
         db.close()

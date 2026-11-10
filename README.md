@@ -69,11 +69,30 @@ For local development outside Docker, set `DATABASE_URL` to your PostgreSQL inst
 - `GET /api/v1/opportunities`
 - `PATCH /api/v1/opportunities/{id}/review`
 
+## Telegram collector
+
+The collector only reads channels already registered as active `telegram` sources. It never joins a channel, never reads private chats, and stores no message text in logs. Checkpoints and source health are persisted on `sources`, so two consecutive runs cannot ingest the same message twice.
+
+```bash
+# One-time interactive login (creates the git-ignored session file)
+.venv/Scripts/python -m app.integrations.telegram.login
+
+# Collect every active Telegram source
+.venv/Scripts/python -m app.integrations.telegram.collector
+
+# Or restrict to one source
+.venv/Scripts/python -m app.integrations.telegram.collector --source-id 1 --limit 50
+```
+
+Required environment: `TELEGRAM_ENABLED=true`, `TELEGRAM_API_ID`, `TELEGRAM_API_HASH`, and `TELEGRAM_SESSION_PATH` (defaults to `var/telegram_collector`, which is git-ignored). A failed run increments `consecutive_failures` and sets an exponential `next_attempt_at`; a subsequent run inside that window skips the source instead of hammering Telegram.
+
 ## Next milestones
 
-1. Telegram authorized-channel collector using Telethon.
-2. Redis/Celery processing pipeline and retry policy.
-3. LLM extraction behind a provider interface with strict Pydantic validation.
-4. Admin dashboard integration and authenticated service-to-service access.
-5. Telegram publisher with explicit approval and attribution.
-6. Analytics, source quality, and market insights.
+Status is tracked with evidence in [`docs/audit/MILESTONE_EXECUTION.md`](docs/audit/MILESTONE_EXECUTION.md).
+
+1. ✅ Telegram authorized-channel collector using Telethon.
+2. ⏳ Redis/Celery processing pipeline and retry policy.
+3. ⏳ LLM extraction behind a provider interface with strict Pydantic validation.
+4. ⏳ Admin dashboard integration and authenticated service-to-service access.
+5. ⏳ Telegram publisher with explicit approval and attribution.
+6. ⏳ Analytics, source quality, and market insights.

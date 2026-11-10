@@ -12,6 +12,7 @@ build/
 *.egg-info/
 .idea/
 .vscode/
+var/
 
 # Telegram session files are account credentials (ROADMAP M2). Never commit them.
 *.session
