@@ -1,0 +1,40 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: yekis_intelligence
+      POSTGRES_USER: yekis_intel
+      POSTGRES_PASSWORD: yekis_intel_dev
+    ports:
+      - "5440:5432"
+    volumes:
+      - intelligence_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U yekis_intel -d yekis_intelligence"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6382:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: .
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://yekis_intel:yekis_intel_dev@db:5432/yekis_intelligence
+    ports:
+      - "8100:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  intelligence_postgres:
