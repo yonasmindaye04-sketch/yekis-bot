@@ -85,11 +85,23 @@ class Opportunity(Base):
     reviewed_by: Mapped[str | None] = mapped_column(String(120))
     reviewer_note: Mapped[str | None] = mapped_column(Text)
 
-    post: Mapped[CollectedPost] = relationship(back_populates="opportunity")
+    post: Mapped[CollectedPost] = relationship(back_populates="opportunity", lazy="joined")
     events: Mapped[list["ReviewEvent"]] = relationship(
         back_populates="opportunity", order_by="ReviewEvent.id"
     )
     publications: Mapped[list["Publication"]] = relationship(back_populates="opportunity")
+
+    @property
+    def original_text(self) -> str | None:
+        return self.post.original_text if self.post else None
+
+    @property
+    def original_url(self) -> str | None:
+        return self.post.original_url if self.post else None
+
+    @property
+    def external_id(self) -> str | None:
+        return self.post.external_id if self.post else None
 
 
 class Publication(Base):

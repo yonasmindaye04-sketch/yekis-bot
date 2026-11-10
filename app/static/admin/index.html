@@ -3,359 +3,1335 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Yekis Intelligence · Admin</title>
+  <title>Yekis Intelligence · Mission Control</title>
   <style>
     :root {
-      color-scheme: light dark;
-      --bg: #0f1419; --panel: #171e26; --panel-2: #1f2933; --line: #2c3947;
-      --text: #e7edf4; --muted: #93a4b8; --accent: #4fd1c5; --warn: #f6ad55;
-      --danger: #fc8181; --ok: #68d391; --radius: 10px;
-      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      color-scheme: dark;
+      --bg: #0b0f14;
+      --bg-alt: #10161f;
+      --panel: #161f2c;
+      --panel-2: #1e2a3a;
+      --panel-3: #27364b;
+      --line: #2e3e52;
+      --line-subtle: #1e2b3b;
+      --text: #f0f4f8;
+      --text-muted: #8fa2b8;
+      --text-dim: #60738a;
+      --accent: #2dd4bf;
+      --accent-hover: #14b8a6;
+      --accent-soft: rgba(45, 212, 191, 0.12);
+      --accent-border: rgba(45, 212, 191, 0.35);
+      --warn: #fbbf24;
+      --warn-soft: rgba(251, 191, 36, 0.12);
+      --warn-border: rgba(251, 191, 36, 0.35);
+      --danger: #f87171;
+      --danger-soft: rgba(248, 113, 113, 0.12);
+      --danger-border: rgba(248, 113, 113, 0.35);
+      --ok: #34d399;
+      --ok-soft: rgba(52, 211, 153, 0.12);
+      --ok-border: rgba(52, 211, 153, 0.35);
+      --blue: #60a5fa;
+      --blue-soft: rgba(96, 165, 250, 0.12);
+      --blue-border: rgba(96, 165, 250, 0.35);
+      --purple: #c084fc;
+      --radius-sm: 6px;
+      --radius: 10px;
+      --radius-lg: 14px;
+      --shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     }
     * { box-sizing: border-box; }
-    body { margin: 0; background: var(--bg); color: var(--text); }
-    header { padding: 18px 24px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
-    header h1 { font-size: 18px; margin: 0; letter-spacing: .3px; }
-    header .spacer { flex: 1; }
-    .pill { font-size: 12px; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
-    .pill.ok { color: var(--ok); border-color: #2f5d43; }
-    .pill.bad { color: var(--danger); border-color: #6b2b2b; }
-    main { max-width: 1180px; margin: 0 auto; padding: 22px; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 14px;
+      line-height: 1.5;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    header {
+      background: var(--bg-alt);
+      border-bottom: 1px solid var(--line);
+      padding: 14px 24px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 700;
+      font-size: 16px;
+      letter-spacing: -0.2px;
+    }
+    .brand-icon {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, var(--accent), #3b82f6);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #0b0f14;
+      font-weight: 900;
+      font-size: 15px;
+    }
+    .spacer { flex: 1; }
+    .pill {
+      font-size: 12px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      color: var(--text-muted);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--panel);
+    }
+    .pill.ok { color: var(--ok); border-color: var(--ok-border); background: var(--ok-soft); }
+    .pill.bad { color: var(--danger); border-color: var(--danger-border); background: var(--danger-soft); }
+    .pill.role { color: var(--blue); border-color: var(--blue-border); background: var(--blue-soft); font-weight: 600; }
+    .pill .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+    main {
+      flex: 1;
+      max-width: 1280px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 24px;
+    }
     section { display: none; }
-    section.active { display: block; }
-    .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; margin-bottom: 16px; }
-    .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
-    .grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
-    label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 5px; }
-    input, select, textarea { width: 100%; padding: 9px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel-2); color: var(--text); font: inherit; }
-    textarea { min-height: 64px; resize: vertical; }
-    button { padding: 9px 13px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel-2); color: var(--text); cursor: pointer; font: inherit; }
-    button:hover { border-color: var(--accent); }
-    button.primary { background: var(--accent); color: #062320; border-color: var(--accent); font-weight: 600; }
-    button.danger { color: var(--danger); }
-    button.small { padding: 5px 9px; font-size: 12px; }
-    .tabs { display: flex; gap: 6px; margin-bottom: 18px; flex-wrap: wrap; }
-    .tabs button.active { border-color: var(--accent); color: var(--accent); }
-    .item { border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; margin-bottom: 12px; background: var(--panel); }
-    .item h3 { margin: 0 0 6px; font-size: 15px; }
-    .muted { color: var(--muted); font-size: 12px; }
-    .badge { display: inline-block; font-size: 11px; padding: 2px 7px; border-radius: 999px; border: 1px solid var(--line); margin: 2px 4px 2px 0; color: var(--muted); }
-    .badge.risk { color: var(--warn); border-color: #6b5325; }
-    .badge.approved { color: var(--ok); border-color: #2f5d43; }
-    .badge.rejected { color: var(--danger); border-color: #6b2b2b; }
-    .badge.needs_review { color: var(--warn); border-color: #6b5325; }
-    .error { color: var(--danger); background: #2a1717; border: 1px solid #6b2b2b; padding: 10px 12px; border-radius: 8px; margin: 10px 0; white-space: pre-wrap; }
-    .empty { color: var(--muted); padding: 18px; text-align: center; border: 1px dashed var(--line); border-radius: var(--radius); }
-    .loading { color: var(--muted); padding: 12px 0; }
-    pre { white-space: pre-wrap; word-break: break-word; }
+    section.active { display: block; animation: fadeIn 0.15s ease-out; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    }
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+      border-bottom: 1px solid var(--line-subtle);
+      padding-bottom: 12px;
+    }
+    .card-header h2, .card-header h3 { margin: 0; font-size: 16px; font-weight: 600; }
+    .card-title { font-size: 16px; font-weight: 600; margin: 0 0 12px; display: flex; align-items: center; gap: 8px; }
+
+    .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+    .grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+    .grid-2 { display: grid; gap: 16px; grid-template-columns: 1fr 1fr; }
+    @media (max-width: 840px) { .grid-2 { grid-template-columns: 1fr; } }
+
+    label { display: block; font-size: 12px; font-weight: 500; color: var(--text-muted); margin-bottom: 6px; }
+    input, select, textarea {
+      width: 100%;
+      padding: 9px 12px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--line);
+      background: var(--panel-2);
+      color: var(--text);
+      font: inherit;
+      font-size: 13px;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    input:focus, select:focus, textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px var(--accent-soft);
+    }
+    textarea { min-height: 80px; resize: vertical; line-height: 1.4; }
+
+    button {
+      padding: 8px 14px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--line);
+      background: var(--panel-2);
+      color: var(--text);
+      cursor: pointer;
+      font: inherit;
+      font-size: 13px;
+      font-weight: 500;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+    }
+    button:hover {
+      background: var(--panel-3);
+      border-color: var(--text-muted);
+    }
+    button.primary {
+      background: var(--accent);
+      color: #0b151a;
+      border-color: var(--accent);
+      font-weight: 600;
+    }
+    button.primary:hover {
+      background: var(--accent-hover);
+      border-color: var(--accent-hover);
+    }
+    button.danger {
+      color: var(--danger);
+      background: var(--danger-soft);
+      border-color: var(--danger-border);
+    }
+    button.danger:hover {
+      background: rgba(248, 113, 113, 0.22);
+    }
+    button.ok {
+      color: var(--ok);
+      background: var(--ok-soft);
+      border-color: var(--ok-border);
+    }
+    button.ok:hover {
+      background: rgba(52, 211, 153, 0.22);
+    }
+    button.warn {
+      color: var(--warn);
+      background: var(--warn-soft);
+      border-color: var(--warn-border);
+    }
+    button.small { padding: 5px 10px; font-size: 12px; }
+
+    .tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 20px;
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 10px;
+      overflow-x: auto;
+    }
+    .tabs button {
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--text-muted);
+      border-radius: var(--radius-sm);
+      padding: 8px 14px;
+      font-size: 13px;
+      font-weight: 500;
+      white-space: nowrap;
+    }
+    .tabs button:hover {
+      color: var(--text);
+      background: var(--panel);
+    }
+    .tabs button.active {
+      color: var(--accent);
+      background: var(--accent-soft);
+      border-color: var(--accent-border);
+      font-weight: 600;
+    }
+    .tabs button .badge-count {
+      background: var(--panel-3);
+      color: var(--text);
+      padding: 1px 6px;
+      border-radius: 999px;
+      font-size: 11px;
+      margin-left: 6px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 8px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      color: var(--text-muted);
+      background: var(--panel-2);
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+    .badge.approved, .badge.active, .badge.published {
+      color: var(--ok);
+      border-color: var(--ok-border);
+      background: var(--ok-soft);
+    }
+    .badge.rejected, .badge.inactive, .badge.failed {
+      color: var(--danger);
+      border-color: var(--danger-border);
+      background: var(--danger-soft);
+    }
+    .badge.pending_review, .badge.scheduled {
+      color: var(--blue);
+      border-color: var(--blue-border);
+      background: var(--blue-soft);
+    }
+    .badge.needs_review, .badge.sending, .badge.risk {
+      color: var(--warn);
+      border-color: var(--warn-border);
+      background: var(--warn-soft);
+    }
+    .badge.skill {
+      color: #93c5fd;
+      background: rgba(147, 197, 253, 0.1);
+      border-color: rgba(147, 197, 253, 0.25);
+      text-transform: none;
+      font-weight: 500;
+      font-size: 12px;
+    }
+
+    .item {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 18px;
+      margin-bottom: 16px;
+      transition: border-color 0.15s;
+    }
+    .item:hover { border-color: #3b4e66; }
+    .item.flagged { border-left: 4px solid var(--warn); }
+    .item h3 { margin: 0 0 6px; font-size: 16px; font-weight: 600; }
+    .item-meta { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; font-size: 12px; color: var(--text-muted); }
+
+    .split-box {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      margin: 14px 0;
+    }
+    @media (max-width: 900px) { .split-box { grid-template-columns: 1fr; } }
+    .sub-panel {
+      background: var(--bg-alt);
+      border: 1px solid var(--line-subtle);
+      border-radius: var(--radius-sm);
+      padding: 12px 14px;
+    }
+    .sub-panel-title {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .orig-text {
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-size: 12px;
+      line-height: 1.45;
+      color: #cbd5e1;
+      max-height: 160px;
+      overflow-y: auto;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      padding: 6px;
+      background: rgba(0,0,0,0.25);
+      border-radius: 4px;
+    }
+
+    .kpi-grid {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      margin-bottom: 20px;
+    }
+    .kpi-card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 14px 16px;
+    }
+    .kpi-label { font-size: 11px; font-weight: 600; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.4px; }
+    .kpi-value { font-size: 24px; font-weight: 700; margin: 4px 0 0; color: var(--text); }
+    .kpi-value.accent { color: var(--accent); }
+    .kpi-value.warn { color: var(--warn); }
+    .kpi-value.ok { color: var(--ok); }
+
+    .history-drawer {
+      margin-top: 14px;
+      padding: 12px;
+      background: var(--bg-alt);
+      border: 1px solid var(--line-subtle);
+      border-radius: var(--radius-sm);
+      font-size: 12px;
+    }
+    .history-entry {
+      padding: 8px 0;
+      border-bottom: 1px solid var(--line-subtle);
+    }
+    .history-entry:last-child { border-bottom: none; }
+    .history-header {
+      display: flex;
+      justify-content: space-between;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+
+    .error {
+      color: var(--danger);
+      background: var(--danger-soft);
+      border: 1px solid var(--danger-border);
+      padding: 12px 14px;
+      border-radius: var(--radius-sm);
+      margin: 12px 0;
+      font-size: 13px;
+    }
+    .empty {
+      color: var(--text-muted);
+      padding: 32px 16px;
+      text-align: center;
+      border: 1px dashed var(--line);
+      border-radius: var(--radius);
+      font-size: 13px;
+    }
+    .loading {
+      color: var(--text-muted);
+      padding: 24px 0;
+      text-align: center;
+      font-size: 13px;
+    }
+
+    .quick-keys {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+    }
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: var(--panel-3);
+      color: var(--text);
+      border: 1px solid var(--accent-border);
+      padding: 10px 16px;
+      border-radius: var(--radius-sm);
+      box-shadow: var(--shadow);
+      z-index: 1000;
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      animation: slideUp 0.2s ease-out;
+    }
+    @keyframes slideUp { from { transform: translateY(10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
     .hidden { display: none !important; }
-    .auth { max-width: 620px; }
+    pre { margin: 0; white-space: pre-wrap; font-family: ui-monospace, SFMono-Regular, monospace; font-size: 12px; }
+
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { text-align: left; padding: 10px 12px; border-bottom: 2px solid var(--line); color: var(--text-muted); font-size: 11px; text-transform: uppercase; }
+    td { padding: 10px 12px; border-bottom: 1px solid var(--line-subtle); }
+    tr:hover td { background: var(--panel-2); }
   </style>
 </head>
 <body>
   <header>
-    <h1>Yekis Intelligence</h1>
-    <span class="pill" id="connection">not connected</span>
+    <div class="brand">
+      <div class="brand-icon">Y</div>
+      <span>Yekis Intelligence</span>
+    </div>
+    <span class="pill" id="connection"><span class="dot"></span> not connected</span>
+    <span class="pill role hidden" id="userRole"></span>
     <div class="spacer"></div>
-    <button class="small" id="logout">Forget key</button>
+    <button class="small" id="logoutBtn">Forget key</button>
   </header>
+
   <main>
-    <div class="card auth" id="authPanel">
-      <h2 style="margin-top:0">Admin access</h2>
-      <p class="muted">Enter a service API key. It is kept in this browser's local storage and sent as <code>X-API-Key</code>. Reviewer keys can review; admin keys can also manage sources.</p>
-      <label for="apiKey">API key</label>
-      <input id="apiKey" type="password" autocomplete="off" placeholder="Paste your API key">
-      <div class="row" style="margin-top:12px">
-        <button class="primary" id="connect">Connect</button>
-        <span class="muted" id="authMessage"></span>
+    <!-- Authentication Card -->
+    <div class="card auth-box" id="authPanel" style="max-width: 580px; margin: 30px auto;">
+      <h2 style="margin: 0 0 8px; font-size: 18px;">Connect to Intelligence API</h2>
+      <p style="color: var(--text-muted); font-size: 13px; margin: 0 0 16px;">
+        Enter an authorized service API key. The key is stored locally in your browser and transmitted as <code>X-API-Key</code>.
+      </p>
+
+      <label for="apiKey">Service API Key</label>
+      <input id="apiKey" type="password" autocomplete="off" placeholder="Paste your API key (minimum 16 characters)">
+
+      <div style="margin-top: 12px;">
+        <label>Quick Connect (Development Presets)</label>
+        <div class="quick-keys">
+          <button class="small" data-key="dev-admin-key-change-me-01" data-label="Admin">Admin</button>
+          <button class="small" data-key="dev-reviewer-key-change-me-01" data-label="Reviewer">Reviewer</button>
+          <button class="small" data-key="dev-collector-key-change-me-01" data-label="Collector">Collector</button>
+          <button class="small" data-key="dev-analyst-key-change-me-01" data-label="Analyst">Analyst</button>
+        </div>
+      </div>
+
+      <div class="row" style="margin-top: 20px;">
+        <button class="primary" id="connectBtn">Connect to Console</button>
+        <span style="color: var(--text-muted); font-size: 12px;" id="authMessage"></span>
       </div>
       <div class="error hidden" id="authError"></div>
     </div>
 
+    <!-- Main Workspace (Visible once connected) -->
     <div id="workspace" class="hidden">
-      <div class="tabs">
-        <button data-tab="review" class="active">Review queue</button>
-        <button data-tab="sources">Sources</button>
-        <button data-tab="publications">Publications</button>
-        <button data-tab="analytics">Analytics</button>
-      </div>
+      <nav class="tabs">
+        <button data-tab="review" class="active">📋 Review queue <span class="badge-count" id="badgePending">-</span></button>
+        <button data-tab="ingest">⚡ Ingest Post</button>
+        <button data-tab="sources">🌐 Sources <span class="badge-count" id="badgeSources">-</span></button>
+        <button data-tab="publications">📢 Publications</button>
+        <button data-tab="analytics">📊 Analytics & Insights</button>
+      </nav>
 
+      <!-- TAB: REVIEW QUEUE -->
       <section id="tab-review" class="active">
-        <div class="card">
-          <div class="row">
-            <div><label>Status</label>
-              <select id="reviewStatus">
-                <option value="pending_review">pending_review</option>
-                <option value="needs_review">needs_review</option>
-                <option value="approved">approved</option>
-                <option value="rejected">rejected</option>
-                <option value="">all</option>
-              </select>
+        <div class="card" style="padding: 14px 18px;">
+          <div class="row" style="justify-content: space-between;">
+            <div class="row">
+              <div>
+                <label>Review Status</label>
+                <select id="reviewStatus" style="width: 170px;">
+                  <option value="pending_review">pending_review</option>
+                  <option value="needs_review">needs_review</option>
+                  <option value="approved">approved</option>
+                  <option value="rejected">rejected</option>
+                  <option value="">all statuses</option>
+                </select>
+              </div>
+              <div>
+                <label>Risk Screening</label>
+                <select id="reviewRisk" style="width: 170px;">
+                  <option value="false">all items</option>
+                  <option value="true">⚠️ risk-flagged only</option>
+                </select>
+              </div>
             </div>
-            <div><label>Filter</label>
-              <select id="reviewRisk"><option value="false">all</option><option value="true">risk flagged only</option></select>
+            <div style="align-self: flex-end;">
+              <button id="refreshReviewBtn">🔄 Refresh</button>
             </div>
-            <div style="align-self:end"><button id="refreshReview">Refresh</button></div>
           </div>
         </div>
-        <div id="reviewList"><div class="loading">Loading…</div></div>
+        <div id="reviewList"><div class="loading">Loading opportunities…</div></div>
       </section>
 
+      <!-- TAB: INGEST POST -->
+      <section id="tab-ingest">
+        <div class="card">
+          <div class="card-header">
+            <h3>⚡ Manual Ingestion & Real-Time Extraction</h3>
+            <span class="pill">Collector / Admin role</span>
+          </div>
+          <p style="color: var(--text-muted); font-size: 13px; margin-top: 0;">
+            Ingest freelance jobs, gigs, or channel messages to run them through extraction, classification, quality scoring, and risk screening.
+          </p>
+
+          <div class="grid-2">
+            <div>
+              <label for="ingestSource">Target Source</label>
+              <select id="ingestSource"><option value="">Select an active source…</option></select>
+            </div>
+            <div>
+              <label for="ingestExternalId">External Message ID</label>
+              <div class="row" style="gap: 8px;">
+                <input id="ingestExternalId" placeholder="e.g. tg-msg-10492" style="flex:1;">
+                <button type="button" class="small" id="generateExtIdBtn" title="Generate random ID">Auto ID</button>
+              </div>
+            </div>
+          </div>
+
+          <div style="margin-top: 14px;">
+            <label for="ingestText">Original Post Content</label>
+            <textarea id="ingestText" rows="5" placeholder="Paste the raw text of the post here…"></textarea>
+          </div>
+
+          <div style="margin-top: 14px;">
+            <label for="ingestUrl">Original Post URL (Optional)</label>
+            <input id="ingestUrl" placeholder="https://t.me/channel_name/1234">
+          </div>
+
+          <div style="margin-top: 14px;">
+            <label>Load Example Post Preset</label>
+            <div class="row" style="gap: 8px;">
+              <button type="button" class="small" id="presetDevJob">Freelance React/Python Job</button>
+              <button type="button" class="small" id="presetScamJob">Upfront-Fee Risk Signal</button>
+              <button type="button" class="small" id="presetDataJob">Data Analytics Project</button>
+            </div>
+          </div>
+
+          <div class="row" style="margin-top: 20px;">
+            <button class="primary" id="submitIngestBtn">🚀 Ingest & Process</button>
+            <span id="ingestMsg" style="font-size: 13px; color: var(--text-muted);"></span>
+          </div>
+          <div class="error hidden" id="ingestError"></div>
+
+          <div id="ingestResult" class="hidden" style="margin-top: 20px;"></div>
+        </div>
+      </section>
+
+      <!-- TAB: SOURCES -->
       <section id="tab-sources">
         <div class="card">
-          <h3 style="margin-top:0">Register source</h3>
-          <div class="grid">
-            <div><label>Name</label><input id="srcName" placeholder="Channel or site name"></div>
-            <div><label>Type</label>
-              <select id="srcType"><option>telegram</option><option>manual</option><option>website</option><option>rss</option></select>
-            </div>
-            <div><label>URL</label><input id="srcUrl" placeholder="https://t.me/channel"></div>
-            <div><label>Category</label><input id="srcCategory" placeholder="software"></div>
+          <div class="card-header">
+            <h3>🌐 Register Channel or Web Source</h3>
+            <span class="pill">Admin role required</span>
           </div>
-          <div class="row" style="margin-top:12px"><button class="primary" id="createSource">Create source</button></div>
+          <div class="grid">
+            <div>
+              <label for="srcName">Source Name</label>
+              <input id="srcName" placeholder="e.g. Tech Jobs Ethiopia">
+            </div>
+            <div>
+              <label for="srcType">Source Type</label>
+              <select id="srcType">
+                <option value="telegram">telegram</option>
+                <option value="manual">manual</option>
+                <option value="website">website</option>
+                <option value="rss">rss</option>
+              </select>
+            </div>
+            <div>
+              <label for="srcUrl">Channel / Source URL</label>
+              <input id="srcUrl" placeholder="https://t.me/techjobs_et">
+            </div>
+            <div>
+              <label for="srcCategory">Default Category</label>
+              <input id="srcCategory" placeholder="e.g. software">
+            </div>
+          </div>
+          <div class="row" style="margin-top: 16px;">
+            <button class="primary" id="createSourceBtn">Create Source</button>
+          </div>
           <div class="error hidden" id="sourceError"></div>
         </div>
-        <div class="card"><div class="row"><button id="refreshSources">Refresh sources</button></div></div>
-        <div id="sourceList"><div class="loading">Loading…</div></div>
+
+        <div class="card" style="padding: 14px 18px;">
+          <div class="row" style="justify-content: space-between;">
+            <h3 style="margin: 0; font-size: 15px;">Configured Sources</h3>
+            <button id="refreshSourcesBtn">🔄 Refresh Sources</button>
+          </div>
+        </div>
+        <div id="sourceList"><div class="loading">Loading sources…</div></div>
       </section>
 
+      <!-- TAB: PUBLICATIONS -->
       <section id="tab-publications">
-        <div class="card"><div class="row"><button id="refreshPublications">Refresh publications</button></div></div>
-        <div id="publicationList"><div class="loading">Loading…</div></div>
+        <div class="card" style="padding: 14px 18px;">
+          <div class="row" style="justify-content: space-between;">
+            <div>
+              <h3 style="margin: 0 0 4px; font-size: 15px;">Published & Scheduled Broadcasts</h3>
+              <span style="color: var(--text-muted); font-size: 12px;">Telegram channel publications require reviewer approval and destination allowlist.</span>
+            </div>
+            <button id="refreshPublicationsBtn">🔄 Refresh Publications</button>
+          </div>
+        </div>
+        <div id="publicationList"><div class="loading">Loading publication history…</div></div>
       </section>
 
+      <!-- TAB: ANALYTICS & INSIGHTS -->
       <section id="tab-analytics">
-        <div class="card"><div class="row"><button id="refreshAnalytics">Refresh analytics</button></div></div>
-        <div id="analyticsBody"><div class="loading">Loading…</div></div>
+        <div class="card" style="padding: 14px 18px;">
+          <div class="row" style="justify-content: space-between;">
+            <h3 style="margin: 0; font-size: 15px;">System Intelligence & Market Analytics</h3>
+            <button id="refreshAnalyticsBtn">🔄 Refresh Metrics</button>
+          </div>
+        </div>
+
+        <div id="analyticsBody"><div class="loading">Computing analytics…</div></div>
       </section>
     </div>
   </main>
 
-  <script>
-    const state = { key: localStorage.getItem("yekis.apiKey") || "" };
-    const $ = (id) => document.getElementById(id);
-    const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  <div id="toast" class="toast hidden"></div>
 
-    function setConnection(label, ok) {
-      const node = $("connection");
-      node.textContent = label;
-      node.className = "pill " + (ok ? "ok" : "bad");
+  <script>
+    const state = {
+      key: localStorage.getItem("yekis.apiKey") || "",
+      principal: null,
+      activeSources: [],
+      pendingCount: 0
+    };
+
+    const $ = (id) => document.getElementById(id);
+    const esc = (val) => String(val ?? "").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+    function toast(message, isError = false) {
+      const el = $("toast");
+      el.textContent = message;
+      el.style.borderColor = isError ? "var(--danger)" : "var(--accent)";
+      el.classList.remove("hidden");
+      setTimeout(() => el.classList.add("hidden"), 3500);
+    }
+
+    function setConnection(label, ok, role = null) {
+      const conn = $("connection");
+      conn.innerHTML = `<span class="dot"></span> ${label}`;
+      conn.className = "pill " + (ok ? "ok" : "bad");
+
+      const roleBadge = $("userRole");
+      if (role) {
+        roleBadge.textContent = role.toUpperCase();
+        roleBadge.classList.remove("hidden");
+      } else {
+        roleBadge.classList.add("hidden");
+      }
     }
 
     async function api(path, options = {}) {
-      const response = await fetch(path, {
-        ...options,
-        headers: {
-          "Content-Type": "application/json",
-          "X-API-Key": state.key,
-          ...(options.headers || {}),
-        },
-      });
+      const headers = {
+        "Content-Type": "application/json",
+        "X-API-Key": state.key,
+        ...(options.headers || {})
+      };
+      const response = await fetch(path, { ...options, headers });
       const text = await response.text();
       let body = null;
       try { body = text ? JSON.parse(text) : null; } catch { body = text; }
+
       if (!response.ok) {
         const detail = body && body.detail ? body.detail : body;
-        const message = typeof detail === "string" ? detail : (detail && (detail.message || detail.code)) || JSON.stringify(detail);
-        const error = new Error(message || `HTTP ${response.status}`);
-        error.status = response.status;
-        throw error;
+        const msg = typeof detail === "string" ? detail : (detail && (detail.message || detail.code)) || JSON.stringify(detail);
+        const err = new Error(msg || `HTTP ${response.status}`);
+        err.status = response.status;
+        err.detail = detail;
+        throw err;
       }
       return body;
     }
 
-    function showError(node, error) {
-      node.textContent = error ? String(error.message || error) : "";
-      node.classList.toggle("hidden", !error);
+    function badge(text, cls = "") {
+      return `<span class="badge ${cls || text}">${esc(text)}</span>`;
     }
 
-    function badge(text, cls = "") { return `<span class="badge ${cls}">${esc(text)}</span>`; }
-
-    function riskBadges(opportunity) {
-      const flags = opportunity.risk_flags || [];
-      if (!flags.length) return "";
-      return flags.map((flag) => badge(flag, "risk")).join("");
+    function money(opp) {
+      if (opp.budget_amount == null) return "Budget not specified";
+      return `${Number(opp.budget_amount).toLocaleString()} ${esc(opp.budget_currency || "")}`.trim();
     }
 
-    function money(opportunity) {
-      if (opportunity.budget_amount == null) return "budget unknown";
-      return `${opportunity.budget_amount} ${opportunity.budget_currency || ""}`.trim();
-    }
-
+    // Opportunity Card Rendering
     function reviewCard(item) {
-      const id = `opp-${item.id}`;
-      const note = item.reviewer_note ? `<div class="muted">Note: ${esc(item.reviewer_note)}</div>` : "";
-      return `<div class="item" id="${id}">
-        <div class="row" style="justify-content:space-between">
-          <h3>#${item.id} · ${esc(item.title)}</h3>
-          <span>${badge(item.review_status, item.review_status)}</span>
-        </div>
-        <div class="muted">${esc(item.opportunity_type)} · ${esc(item.category || "uncategorized")} · ${esc(money(item))} · quality ${item.quality_score} · risk ${item.risk_score} · ${esc(item.extraction_method)}</div>
-        <div style="margin:6px 0">${riskBadges(item)}</div>
-        <div class="muted">${esc(item.description || "").slice(0, 420)}</div>
-        ${note}
-        <div class="grid" style="margin-top:12px">
-          <div><label>Note</label><input id="note-${item.id}" maxlength="2000" placeholder="Why this decision?"></div>
-          <div><label>Title</label><input id="title-${item.id}" value="${esc(item.title)}"></div>
-          <div><label>Category</label><input id="category-${item.id}" value="${esc(item.category || "")}"></div>
-          <div><label>Duration</label><input id="duration-${item.id}" value="${esc(item.duration || "")}"></div>
-          <div><label>Budget</label><input id="budget-${item.id}" type="number" step="0.01" min="0" value="${item.budget_amount ?? ""}"></div>
-          <div><label>Currency</label>
-            <select id="currency-${item.id}"><option value="">none</option><option ${item.budget_currency === "USD" ? "selected" : ""}>USD</option><option ${item.budget_currency === "ETB" ? "selected" : ""}>ETB</option></select>
+      const id = item.id;
+      const flags = item.risk_flags || [];
+      const isFlagged = flags.length > 0 || item.risk_score > 0;
+      const riskPills = flags.map((f) => `<span class="badge risk">⚠️ ${esc(f)}</span>`).join(" ");
+      const skillsPills = (item.skills || []).map((s) => `<span class="badge skill">${esc(s)}</span>`).join(" ");
+
+      const origText = item.original_text || "(Original content not attached or post record deleted)";
+      const extId = item.external_id ? `<code>${esc(item.external_id)}</code>` : "—";
+      const origUrl = item.original_url ? `<a href="${esc(item.original_url)}" target="_blank" rel="noopener" style="color:var(--accent);">View source message ↗</a>` : "";
+
+      return `
+      <div class="item ${isFlagged ? "flagged" : ""}" id="opp-${id}">
+        <div class="row" style="justify-content: space-between; margin-bottom: 8px;">
+          <div class="row" style="gap: 8px;">
+            <h3>#${id} · ${esc(item.title)}</h3>
+          </div>
+          <div class="row" style="gap: 6px;">
+            ${badge(item.review_status, item.review_status)}
+            <span class="badge" title="Extraction engine">${esc(item.extraction_method)}</span>
           </div>
         </div>
-        <div class="row" style="margin-top:10px">
-          <button class="primary small" data-action="review" data-id="${item.id}" data-decision="approved">Approve</button>
-          <button class="small" data-action="review" data-id="${item.id}" data-decision="needs_review">Needs review</button>
-          <button class="small danger" data-action="review" data-id="${item.id}" data-decision="rejected">Reject</button>
-          <button class="small" data-action="save" data-id="${item.id}">Save fields</button>
-          ${item.review_status === "approved" ? `<button class="small" data-action="publish" data-id="${item.id}">Publish</button>` : ""}
-          <span class="muted" id="msg-${item.id}"></span>
+
+        <div class="item-meta">
+          <span><strong>Type:</strong> ${esc(item.opportunity_type)}</span>
+          <span>•</span>
+          <span><strong>Category:</strong> ${esc(item.category || "uncategorized")}</span>
+          <span>•</span>
+          <span><strong>Compensation:</strong> ${esc(money(item))}</span>
+          <span>•</span>
+          <span><strong>Quality:</strong> ${item.quality_score}/100</span>
+          <span>•</span>
+          <span><strong>Risk:</strong> ${item.risk_score}</span>
+          ${item.remote ? `<span>•</span> <span class="badge ok">Remote</span>` : ""}
+        </div>
+
+        ${isFlagged ? `<div style="margin: 8px 0;">${riskPills}</div>` : ""}
+
+        <!-- Split Original vs Extracted Details -->
+        <div class="split-box">
+          <div class="sub-panel">
+            <div class="sub-panel-title">
+              <span>Original Post Verbatim</span>
+              <span>Ext ID: ${extId}</span>
+            </div>
+            <div class="orig-text">${esc(origText)}</div>
+            ${origUrl ? `<div style="margin-top: 6px; font-size: 11px;">${origUrl}</div>` : ""}
+          </div>
+
+          <div class="sub-panel">
+            <div class="sub-panel-title">Extracted Summary & Attributes</div>
+            <div style="font-size: 12px; color: var(--text-muted); line-height: 1.45; max-height: 100px; overflow-y: auto; margin-bottom: 8px;">
+              ${esc(item.description || "No description extracted.")}
+            </div>
+            <div style="margin-top: 6px;">
+              <span style="font-size: 11px; color: var(--text-dim); display: block; margin-bottom: 4px;">EXTRACTED SKILLS:</span>
+              <div>${skillsPills || `<span style="color:var(--text-dim); font-size:12px;">None detected</span>`}</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Editable Fields Section -->
+        <div class="grid" style="margin-top: 14px;">
+          <div>
+            <label>Reviewer Note (Audit Trail)</label>
+            <input id="note-${id}" maxlength="2000" placeholder="Reason for review decision…" value="${esc(item.reviewer_note || "")}">
+          </div>
+          <div>
+            <label>Opportunity Title</label>
+            <input id="title-${id}" value="${esc(item.title)}">
+          </div>
+          <div>
+            <label>Category</label>
+            <input id="category-${id}" value="${esc(item.category || "")}">
+          </div>
+          <div>
+            <label>Duration / Deadline</label>
+            <input id="duration-${id}" value="${esc(item.duration || "")}">
+          </div>
+          <div>
+            <label>Budget Amount</label>
+            <input id="budget-${id}" type="number" step="0.01" min="0" value="${item.budget_amount ?? ""}">
+          </div>
+          <div>
+            <label>Currency</label>
+            <select id="currency-${id}">
+              <option value="">(None)</option>
+              <option value="USD" ${item.budget_currency === "USD" ? "selected" : ""}>USD ($)</option>
+              <option value="ETB" ${item.budget_currency === "ETB" ? "selected" : ""}>ETB (Br)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Actions Bar -->
+        <div class="row" style="margin-top: 14px; justify-content: space-between;">
+          <div class="row" style="gap: 8px;">
+            <button class="ok small" data-action="review" data-id="${id}" data-decision="approved">✅ Approve</button>
+            <button class="warn small" data-action="review" data-id="${id}" data-decision="needs_review">⚠️ Needs Review</button>
+            <button class="danger small" data-action="review" data-id="${id}" data-decision="rejected">❌ Reject</button>
+            <button class="small" data-action="save" data-id="${id}">💾 Save Edits</button>
+            ${item.review_status === "approved" ? `<button class="primary small" data-action="publish" data-id="${id}">📢 Publish</button>` : ""}
+          </div>
+          <div class="row">
+            <button class="small" data-action="toggle-history" data-id="${id}">📜 History</button>
+            <span class="item-meta" id="msg-${id}"></span>
+          </div>
+        </div>
+
+        <div id="history-${id}" class="history-drawer hidden">
+          <div class="loading">Loading audit events…</div>
         </div>
       </div>`;
     }
 
     async function loadReview() {
       const list = $("reviewList");
-      list.innerHTML = '<div class="loading">Loading…</div>';
+      list.innerHTML = '<div class="loading">Loading opportunities…</div>';
       try {
         const params = new URLSearchParams({ limit: "100" });
-        if ($("reviewStatus").value) params.set("status", $("reviewStatus").value);
+        const st = $("reviewStatus").value;
+        if (st) params.set("status", st);
         if ($("reviewRisk").value === "true") params.set("risk_only", "true");
+
         const items = await api("/api/v1/opportunities?" + params.toString());
-        list.innerHTML = items.length ? items.map(reviewCard).join("") : '<div class="empty">No opportunities match this filter.</div>';
-      } catch (error) {
-        list.innerHTML = `<div class="error">${esc(error.message)}</div>`;
-        if (error.status === 401) showAuth();
+        list.innerHTML = items.length
+          ? items.map(reviewCard).join("")
+          : '<div class="empty">No opportunities match the selected criteria.</div>';
+
+        // Update badge for pending review
+        if (!st || st === "pending_review") {
+          $("badgePending").textContent = items.length;
+        }
+      } catch (err) {
+        list.innerHTML = `<div class="error">${esc(err.message)}</div>`;
+        if (err.status === 401) showAuth();
       }
     }
 
     async function reviewAction(id, decision) {
-      const message = $(`msg-${id}`);
-      message.textContent = "Saving…";
+      const msg = $(`msg-${id}`);
+      if (msg) msg.textContent = "Updating status…";
       try {
+        const note = $(`note-${id}`) ? $(`note-${id}`).value : null;
         await api(`/api/v1/opportunities/${id}/review`, {
           method: "PATCH",
-          body: JSON.stringify({ decision, reviewer_note: $(`note-${id}`).value || null }),
+          body: JSON.stringify({ decision, reviewer_note: note || null })
         });
+        toast(`Opportunity #${id} marked as ${decision}.`);
         await loadReview();
-      } catch (error) {
-        message.textContent = error.message;
-      }
-    }
-
-    async function publishAction(id) {
-      const channel = prompt("Channel to publish to (for example @ops_test_channel):", "");
-      if (!channel) return;
-      const message = $(`msg-${id}`);
-      message.textContent = "Publishing…";
-      try {
-        const publication = await api(`/api/v1/opportunities/${id}/publish`, {
-          method: "POST",
-          body: JSON.stringify({ channel }),
-        });
-        message.textContent = `publication ${publication.id}: ${publication.status}`;
-      } catch (error) {
-        message.textContent = error.message;
+      } catch (err) {
+        if (msg) msg.textContent = `Error: ${err.message}`;
+        toast(err.message, true);
       }
     }
 
     async function saveFields(id) {
-      const message = $(`msg-${id}`);
-      const amount = $(`budget-${id}`).value;
-      const currency = $(`currency-${id}`).value;
+      const msg = $(`msg-${id}`);
+      if (msg) msg.textContent = "Saving edits…";
+      const amountVal = $(`budget-${id}`).value;
       const payload = {
         title: $(`title-${id}`).value,
         category: $(`category-${id}`).value || null,
         duration: $(`duration-${id}`).value || null,
-        budget_amount: amount === "" ? null : Number(amount),
-        budget_currency: currency || null,
+        budget_amount: amountVal === "" ? null : Number(amountVal),
+        budget_currency: $(`currency-${id}`).value || null
       };
-      message.textContent = "Saving…";
+
       try {
-        await api(`/api/v1/opportunities/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
+        await api(`/api/v1/opportunities/${id}`, {
+          method: "PATCH",
+          body: JSON.stringify(payload)
+        });
+        toast(`Opportunity #${id} fields saved.`);
         await loadReview();
-      } catch (error) {
-        message.textContent = error.message;
+      } catch (err) {
+        if (msg) msg.textContent = `Error: ${err.message}`;
+        toast(err.message, true);
       }
     }
 
+    async function publishAction(id) {
+      const channel = prompt("Enter target Telegram channel (e.g. @ops_test_channel):", "@ops_test_channel");
+      if (!channel) return;
+      const sched = prompt("Optional schedule ISO timestamp (leave empty to publish immediately):", "");
+
+      const payload = { channel };
+      if (sched && sched.trim()) payload.scheduled_at = sched.trim();
+
+      const msg = $(`msg-${id}`);
+      if (msg) msg.textContent = "Publishing…";
+      try {
+        const res = await api(`/api/v1/opportunities/${id}/publish`, {
+          method: "POST",
+          body: JSON.stringify(payload)
+        });
+        toast(`Broadcast #${res.id} queued (status: ${res.status}).`);
+        await loadReview();
+      } catch (err) {
+        toast(`Publish failed: ${err.message}`, true);
+        if (msg) msg.textContent = `Publish error: ${err.message}`;
+      }
+    }
+
+    async function toggleHistory(id) {
+      const container = $(`history-${id}`);
+      if (!container) return;
+      if (!container.classList.contains("hidden")) {
+        container.classList.add("hidden");
+        return;
+      }
+      container.classList.remove("hidden");
+      container.innerHTML = '<div class="loading">Loading audit timeline…</div>';
+      try {
+        const events = await api(`/api/v1/opportunities/${id}/events`);
+        if (!events.length) {
+          container.innerHTML = '<div style="color:var(--text-dim);">No review audit events recorded yet.</div>';
+          return;
+        }
+        container.innerHTML = events.map((ev) => `
+          <div class="history-entry">
+            <div class="history-header">
+              <span><strong>${esc(ev.actor || "system")}</strong> (${esc(ev.event_type)})</span>
+              <span>${new Date(ev.created_at).toLocaleString()}</span>
+            </div>
+            ${ev.from_status || ev.to_status ? `<div>Transition: <code>${esc(ev.from_status || "—")}</code> ➔ <code>${esc(ev.to_status || "—")}</code></div>` : ""}
+            ${ev.note ? `<div style="color:var(--text-muted); margin-top:2px;">Note: <em>${esc(ev.note)}</em></div>` : ""}
+            ${ev.diff && Object.keys(ev.diff).length ? `<div style="margin-top:4px;"><pre>${esc(JSON.stringify(ev.diff, null, 2))}</pre></div>` : ""}
+          </div>
+        `).join("");
+      } catch (err) {
+        container.innerHTML = `<div class="error">${esc(err.message)}</div>`;
+      }
+    }
+
+    // Ingest Tab
+    async function loadSourcesForIngest() {
+      const sel = $("ingestSource");
+      try {
+        const sources = await api("/api/v1/sources?limit=200");
+        state.activeSources = sources.filter((s) => s.is_active);
+        sel.innerHTML = state.activeSources.length
+          ? state.activeSources.map((s) => `<option value="${s.id}">${esc(s.name)} (#${s.id} · ${esc(s.source_type)})</option>`).join("")
+          : '<option value="">No active sources available</option>';
+      } catch (err) {
+        sel.innerHTML = `<option value="">Error loading sources</option>`;
+      }
+    }
+
+    function generateId() {
+      const id = "man-" + Date.now().toString(36) + "-" + Math.random().toString(36).substring(2, 6);
+      $("ingestExternalId").value = id;
+    }
+
+    async function submitIngestion() {
+      const srcId = $("ingestSource").value;
+      const extId = $("ingestExternalId").value.trim();
+      const text = $("ingestText").value.trim();
+      const url = $("ingestUrl").value.trim();
+      const errBox = $("ingestError");
+      const resBox = $("ingestResult");
+      const msg = $("ingestMsg");
+
+      errBox.classList.add("hidden");
+      resBox.classList.add("hidden");
+      msg.textContent = "";
+
+      if (!srcId) { toast("Select an active source", true); return; }
+      if (!extId) { toast("Provide an external message ID", true); return; }
+      if (!text || text.length < 10) { toast("Original text must be at least 10 characters", true); return; }
+
+      msg.textContent = "Processing and extracting…";
+      try {
+        const payload = {
+          source_id: Number(srcId),
+          external_id: extId,
+          original_text: text,
+          original_url: url || null
+        };
+        const opp = await api("/api/v1/ingestion/manual", {
+          method: "POST",
+          body: JSON.stringify(payload)
+        });
+
+        msg.textContent = "Success!";
+        toast(`Opportunity #${opp.id} created and queued!`);
+
+        resBox.innerHTML = `
+          <div class="card" style="border-color: var(--accent-border); background: var(--bg-alt);">
+            <div class="card-header">
+              <h3 style="color:var(--accent);">Processed Opportunity #${opp.id}</h3>
+              ${badge(opp.review_status, opp.review_status)}
+            </div>
+            <div class="grid">
+              <div><strong>Title:</strong> ${esc(opp.title)}</div>
+              <div><strong>Type:</strong> ${esc(opp.opportunity_type)}</div>
+              <div><strong>Category:</strong> ${esc(opp.category || "none")}</div>
+              <div><strong>Budget:</strong> ${esc(money(opp))}</div>
+              <div><strong>Quality Score:</strong> ${opp.quality_score}/100</div>
+              <div><strong>Risk Score:</strong> ${opp.risk_score}</div>
+              <div><strong>Engine:</strong> ${esc(opp.extraction_method)}</div>
+            </div>
+            ${opp.risk_flags && opp.risk_flags.length ? `<div style="margin-top:10px;"><strong>Flags:</strong> ${opp.risk_flags.map((f)=>badge(f,"risk")).join(" ")}</div>` : ""}
+            <div class="row" style="margin-top:14px;">
+              <button class="primary small" id="jumpToReviewBtn" data-id="${opp.id}">Review Opportunity #${opp.id} ➔</button>
+            </div>
+          </div>
+        `;
+        resBox.classList.remove("hidden");
+        generateId();
+      } catch (err) {
+        msg.textContent = "";
+        errBox.textContent = err.message;
+        errBox.classList.remove("hidden");
+        toast(err.message, true);
+      }
+    }
+
+    // Sources Tab
     async function loadSources() {
       const list = $("sourceList");
-      list.innerHTML = '<div class="loading">Loading…</div>';
+      list.innerHTML = '<div class="loading">Loading sources…</div>';
       try {
-        const items = await api("/api/v1/sources?limit=200");
-        list.innerHTML = items.length ? items.map((source) => `<div class="item">
-          <div class="row" style="justify-content:space-between">
-            <h3>${esc(source.name)} <span class="muted">#${source.id}</span></h3>
-            <span>${badge(source.is_active ? "active" : "inactive", source.is_active ? "approved" : "rejected")}</span>
+        const sources = await api("/api/v1/sources?limit=200");
+        $("badgeSources").textContent = sources.length;
+        if (!sources.length) {
+          list.innerHTML = '<div class="empty">No sources registered yet. Add one above.</div>';
+          return;
+        }
+        list.innerHTML = sources.map((s) => `
+          <div class="item">
+            <div class="row" style="justify-content: space-between;">
+              <h3>${esc(s.name)} <span style="font-size:12px; color:var(--text-dim);">#${s.id}</span></h3>
+              <div class="row" style="gap:6px;">
+                ${badge(s.is_active ? "active" : "inactive", s.is_active ? "active" : "inactive")}
+                <span class="badge">${esc(s.source_type)}</span>
+              </div>
+            </div>
+            <div class="item-meta">
+              <span><strong>URL:</strong> <a href="${esc(s.source_url)}" target="_blank" rel="noopener" style="color:var(--blue);">${esc(s.source_url)}</a></span>
+              <span>•</span>
+              <span><strong>Category:</strong> ${esc(s.category || "none")}</span>
+              <span>•</span>
+              <span><strong>Last Checkpoint:</strong> ${s.last_collected_message_id || "None"}</span>
+            </div>
+            <div class="item-meta" style="margin-bottom:6px;">
+              <span><strong>Success:</strong> ${s.last_success_at ? new Date(s.last_success_at).toLocaleString() : "never"}</span>
+              <span>•</span>
+              <span><strong>Failures:</strong> ${s.consecutive_failures}</span>
+              ${s.next_attempt_at ? `<span>•</span> <span><strong>Next attempt:</strong> ${new Date(s.next_attempt_at).toLocaleTimeString()}</span>` : ""}
+            </div>
+            ${s.last_error ? `<div class="error" style="margin:6px 0; font-size:12px;">Last error: ${esc(s.last_error)}</div>` : ""}
+            <div class="row" style="margin-top: 10px;">
+              <button class="small ${s.is_active ? "danger" : "ok"}" data-source="${s.id}" data-active="${s.is_active ? "false" : "true"}">
+                ${s.is_active ? "⏸️ Deactivate Source" : "▶️ Activate Source"}
+              </button>
+            </div>
           </div>
-          <div class="muted">${esc(source.source_type)} · ${esc(source.source_url)} · ${esc(source.category || "uncategorized")}</div>
-          <div class="muted">last success: ${esc(source.last_success_at || "never")} · failures: ${source.consecutive_failures}</div>
-          ${source.last_error ? `<div class="error">${esc(source.last_error)}</div>` : ""}
-          <div class="row" style="margin-top:8px"><button class="small" data-source="${source.id}" data-active="${source.is_active ? "false" : "true"}">${source.is_active ? "Deactivate" : "Activate"}</button></div>
-        </div>`).join("") : '<div class="empty">No sources yet. Register one above.</div>';
-      } catch (error) {
-        list.innerHTML = `<div class="error">${esc(error.message)}</div>`;
-        if (error.status === 401) showAuth();
+        `).join("");
+      } catch (err) {
+        list.innerHTML = `<div class="error">${esc(err.message)}</div>`;
       }
     }
 
     async function createSource() {
-      showError($("sourceError"), null);
+      const errBox = $("sourceError");
+      errBox.classList.add("hidden");
+      const name = $("srcName").value.trim();
+      const type = $("srcType").value;
+      const url = $("srcUrl").value.trim();
+      const cat = $("srcCategory").value.trim();
+
+      if (!name || !url) {
+        errBox.textContent = "Source Name and URL are required.";
+        errBox.classList.remove("hidden");
+        return;
+      }
       try {
         await api("/api/v1/sources", {
           method: "POST",
           body: JSON.stringify({
-            name: $("srcName").value,
-            source_type: $("srcType").value,
-            source_url: $("srcUrl").value,
-            category: $("srcCategory").value || null,
-            is_active: true,
-          }),
+            name,
+            source_type: type,
+            source_url: url,
+            category: cat || null,
+            is_active: true
+          })
         });
-        $("srcName").value = ""; $("srcUrl").value = ""; $("srcCategory").value = "";
+        $("srcName").value = "";
+        $("srcUrl").value = "";
+        $("srcCategory").value = "";
+        toast(`Source "${name}" created.`);
         await loadSources();
-      } catch (error) {
-        showError($("sourceError"), error);
+        await loadSourcesForIngest();
+      } catch (err) {
+        errBox.textContent = err.message;
+        errBox.classList.remove("hidden");
+        toast(err.message, true);
       }
     }
 
     async function toggleSource(id, active) {
       try {
-        await api(`/api/v1/sources/${id}/status`, { method: "PATCH", body: JSON.stringify({ is_active: active }) });
+        await api(`/api/v1/sources/${id}/status`, {
+          method: "PATCH",
+          body: JSON.stringify({ is_active: active })
+        });
+        toast(`Source #${id} ${active ? "activated" : "deactivated"}.`);
         await loadSources();
-      } catch (error) {
-        alert(error.message);
+        await loadSourcesForIngest();
+      } catch (err) {
+        toast(`Error: ${err.message}`, true);
       }
     }
 
+    // Publications Tab
     async function loadPublications() {
       const list = $("publicationList");
-      list.innerHTML = '<div class="loading">Loading…</div>';
+      list.innerHTML = '<div class="loading">Loading publication history…</div>';
       try {
         const items = await api("/api/v1/publications?limit=100");
-        list.innerHTML = items.length ? items.map((item) => `<div class="item">
-          <div class="row" style="justify-content:space-between"><h3>#${item.id} · opportunity ${item.opportunity_id}</h3><span>${badge(item.status)}</span></div>
-          <div class="muted">channel: ${esc(item.channel)} · external id: ${esc(item.external_message_id || "—")} · attempts: ${item.attempts}</div>
-          ${item.error ? `<div class="error">${esc(item.error)}</div>` : ""}
-        </div>`).join("") : '<div class="empty">No publications yet. Approve an opportunity and publish it from the API.</div>';
-      } catch (error) {
-        list.innerHTML = `<div class="error">${esc(error.message)}</div>`;
+        if (!items.length) {
+          list.innerHTML = '<div class="empty">No publication broadcasts recorded yet. Approve an opportunity to publish.</div>';
+          return;
+        }
+        list.innerHTML = `
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Opportunity</th>
+                <th>Destination</th>
+                <th>Status</th>
+                <th>Attempts</th>
+                <th>Message ID</th>
+                <th>Schedule / Published</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${items.map((p) => `
+                <tr>
+                  <td>#${p.id}</td>
+                  <td><a href="#opp-${p.opportunity_id}" style="color:var(--accent);">#${p.opportunity_id}</a></td>
+                  <td><code>${esc(p.channel)}</code></td>
+                  <td>${badge(p.status, p.status)}</td>
+                  <td>${p.attempts}</td>
+                  <td><code>${esc(p.external_message_id || "—")}</code></td>
+                  <td style="font-size:12px; color:var(--text-muted);">
+                    ${p.published_at ? "Sent: " + new Date(p.published_at).toLocaleString() : (p.scheduled_at ? "Due: " + new Date(p.scheduled_at).toLocaleString() : "Immediate")}
+                    ${p.last_error ? `<div class="error" style="margin:2px 0 0; padding:4px 6px; font-size:11px;">${esc(p.last_error)}</div>` : ""}
+                  </td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        `;
+      } catch (err) {
+        list.innerHTML = `<div class="error">${esc(err.message)}</div>`;
       }
     }
 
+    // Analytics Tab
     async function loadAnalytics() {
-      const body = $("analyticsBody");
-      body.innerHTML = '<div class="loading">Loading…</div>';
+      const container = $("analyticsBody");
+      container.innerHTML = '<div class="loading">Computing cross-system analytics…</div>';
       try {
-        const data = await api("/api/v1/analytics/overview");
-        body.innerHTML = `<div class="grid">${Object.entries(data).map(([key, value]) => `<div class="card"><div class="muted">${esc(key)}</div><pre>${esc(typeof value === "object" ? JSON.stringify(value, null, 2) : value)}</pre></div>`).join("")}</div>`;
-      } catch (error) {
-        body.innerHTML = `<div class="error">${esc(error.message)}</div>`;
+        const [overview, sources, market, trends] = await Promise.all([
+          api("/api/v1/analytics/overview"),
+          api("/api/v1/analytics/sources"),
+          api("/api/v1/analytics/market"),
+          api("/api/v1/analytics/trends?days=30")
+        ]);
+
+        const appRate = overview.approval_rate != null ? Math.round(overview.approval_rate * 100) + "%" : "0%";
+        const pendingCount = (overview.by_status && overview.by_status.pending_review) || 0;
+        const approvedCount = (overview.by_status && overview.by_status.approved) || 0;
+        const publishedCount = overview.published || 0;
+        const riskCount = overview.risk_flagged || 0;
+
+        container.innerHTML = `
+          <!-- KPI Metrics Row -->
+          <div class="kpi-grid">
+            <div class="kpi-card">
+              <div class="kpi-label">Total Sources</div>
+              <div class="kpi-value">${overview.total_sources || 0}</div>
+              <div style="font-size:11px; color:var(--text-dim); margin-top:2px;">${overview.active_sources || 0} active</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-label">Ingested Posts</div>
+              <div class="kpi-value">${overview.total_posts || 0}</div>
+              <div style="font-size:11px; color:var(--text-dim); margin-top:2px;">Unique messages</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-label">Opportunities</div>
+              <div class="kpi-value accent">${overview.total_opportunities || 0}</div>
+              <div style="font-size:11px; color:var(--text-dim); margin-top:2px;">Extracted entities</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-label">Pending Review</div>
+              <div class="kpi-value warn">${pendingCount}</div>
+              <div style="font-size:11px; color:var(--text-dim); margin-top:2px;">Awaiting decision</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-label">Approval Rate</div>
+              <div class="kpi-value ok">${appRate}</div>
+              <div style="font-size:11px; color:var(--text-dim); margin-top:2px;">${approvedCount} approved</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-label">Risk Flagged</div>
+              <div class="kpi-value warn">${riskCount}</div>
+              <div style="font-size:11px; color:var(--text-dim); margin-top:2px;">Screened for review</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-label">Published Broadcasts</div>
+              <div class="kpi-value ok">${publishedCount}</div>
+              <div style="font-size:11px; color:var(--text-dim); margin-top:2px;">Telegram posts</div>
+            </div>
+          </div>
+
+          <!-- Market Insights Section -->
+          <div class="grid-2">
+            <div class="card">
+              <h3 class="card-title">🔥 Top In-Demand Skills</h3>
+              <div style="display:flex; flex-wrap:wrap; gap:8px;">
+                ${((market.skills_demand || []).map((sk) => `<span class="badge skill" style="font-size:13px; padding:4px 10px;">${esc(sk.key)} <strong style="margin-left:4px; color:var(--text);">${sk.count}</strong></span>`).join("")) || '<span style="color:var(--text-dim);">No skills indexed yet.</span>'}
+              </div>
+
+              <div style="margin-top:20px;">
+                <h4 style="font-size:13px; color:var(--text-muted); margin:0 0 8px;">Work Arrangement</h4>
+                <div class="row" style="gap:12px;">
+                  <span class="badge ok">Remote: ${market.remote_share != null ? Math.round(market.remote_share * 100) + "%" : "0%"}</span>
+                  <span style="font-size:12px; color:var(--text-muted);">Classified opportunities</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="card">
+              <h3 class="card-title">💰 Compensation Distribution</h3>
+              ${((market.budget || []).map((stats) => `
+                <div style="margin-bottom:14px; padding:10px; background:var(--bg-alt); border-radius:var(--radius-sm);">
+                  <div style="font-weight:600; color:var(--accent); font-size:14px; margin-bottom:4px;">${esc(stats.currency)} (${stats.count} opportunities)</div>
+                  <div class="grid" style="grid-template-columns:repeat(3, 1fr); font-size:12px;">
+                    <div>Min: <strong>${Number(stats.min_amount).toLocaleString()}</strong></div>
+                    <div>Median: <strong>${stats.median_amount != null ? Number(stats.median_amount).toLocaleString() : "—"}</strong></div>
+                    <div>Max: <strong>${Number(stats.max_amount).toLocaleString()}</strong></div>
+                  </div>
+                </div>
+              `).join("")) || '<div style="color:var(--text-dim);">No compensation data recorded.</div>'}
+            </div>
+          </div>
+
+          <!-- Source Performance Table -->
+          <div class="card">
+            <h3 class="card-title">🌐 Source Performance & Collector Health</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>Source</th>
+                  <th>Posts</th>
+                  <th>Opportunities</th>
+                  <th>Approval %</th>
+                  <th>Avg Quality</th>
+                  <th>Risk Count</th>
+                  <th>Collector Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${sources.map((s) => `
+                  <tr>
+                    <td><strong>${esc(s.name)}</strong> <span style="font-size:11px; color:var(--text-dim);">${esc(s.source_type)}</span></td>
+                    <td>${s.posts}</td>
+                    <td>${s.opportunities}</td>
+                    <td>${s.approval_rate != null ? Math.round(s.approval_rate * 100) + "%" : "—"}</td>
+                    <td>${Math.round(s.avg_quality || 0)}/100</td>
+                    <td>${s.risk_flagged > 0 ? `<span class="badge risk">${s.risk_flagged}</span>` : "0"}</td>
+                    <td>
+                      <span class="badge ${s.consecutive_failures > 0 ? "failed" : "active"}">
+                        ${s.consecutive_failures > 0 ? `${s.consecutive_failures} failures` : "Healthy"}
+                      </span>
+                    </td>
+                  </tr>
+                `).join("") || '<tr><td colspan="7" class="empty">No sources recorded</td></tr>'}
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Activity Trends (30 Days) -->
+          <div class="card">
+            <h3 class="card-title">📈 30-Day Activity Trends</h3>
+            <div style="font-size:12px; color:var(--text-muted); margin-bottom:12px;">Daily aggregated pipeline activity</div>
+            <table>
+              <thead>
+                <tr>
+                  <th>Date (UTC)</th>
+                  <th>Posts Ingested</th>
+                  <th>Opportunities</th>
+                  <th>Approved</th>
+                  <th>Published</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${(Array.isArray(trends) ? trends : (trends.trends || [])).slice(-10).reverse().map((t) => `
+                  <tr>
+                    <td><code>${esc(t.day || t.date)}</code></td>
+                    <td>${t.posts}</td>
+                    <td>${t.opportunities}</td>
+                    <td>${t.approvals}</td>
+                    <td>${t.publications}</td>
+                  </tr>
+                `).join("") || '<tr><td colspan="5" class="empty">No trend entries in window</td></tr>'}
+              </tbody>
+            </table>
+          </div>
+                    <td>${t.approvals}</td>
+                    <td>${t.publications}</td>
+                  </tr>
+                `).join("") || '<tr><td colspan="5" class="empty">No trend entries in window</td></tr>'}
+              </tbody>
+            </table>
+          </div>
+        `;
+      } catch (err) {
+        container.innerHTML = `<div class="error">${esc(err.message)}</div>`;
       }
     }
 
+    // Auth & Navigation
     function showAuth() {
       $("authPanel").classList.remove("hidden");
       $("workspace").classList.add("hidden");
@@ -365,63 +1341,141 @@
     function showWorkspace() {
       $("authPanel").classList.add("hidden");
       $("workspace").classList.remove("hidden");
-      setConnection("connected", true);
+      setConnection("connected", true, state.principal ? state.principal.role : "service");
       loadReview();
+      loadSourcesForIngest();
+      generateId();
     }
 
     async function connect() {
       state.key = $("apiKey").value.trim();
-      showError($("authError"), null);
-      if (!state.key) { showError($("authError"), "Enter an API key."); return; }
+      const errBox = $("authError");
+      errBox.classList.add("hidden");
+
+      if (!state.key) {
+        errBox.textContent = "Please enter an API key.";
+        errBox.classList.remove("hidden");
+        return;
+      }
+      $("authMessage").textContent = "Validating key…";
       try {
+        // Probe endpoint with key
         await api("/api/v1/sources?limit=1");
         localStorage.setItem("yekis.apiKey", state.key);
-        $("authMessage").textContent = "Connected";
+        $("authMessage").textContent = "";
+
+        // Infer role from quick keys or default
+        const matched = {
+          "dev-admin-key-change-me-01": { role: "admin", name: "dev-admin" },
+          "dev-reviewer-key-change-me-01": { role: "reviewer", name: "dev-reviewer" },
+          "dev-collector-key-change-me-01": { role: "collector", name: "dev-collector" },
+          "dev-analyst-key-change-me-01": { role: "analyst", name: "dev-analyst" }
+        }[state.key];
+        state.principal = matched || { role: "authenticated", name: "service" };
+
         showWorkspace();
-      } catch (error) {
-        showError($("authError"), error);
+        toast("Connected to Yekis Intelligence");
+      } catch (err) {
+        $("authMessage").textContent = "";
+        errBox.textContent = err.message || "Authentication failed";
+        errBox.classList.remove("hidden");
         setConnection("authentication failed", false);
       }
     }
 
     function bindTabs() {
-      document.querySelectorAll(".tabs button").forEach((button) => {
-        button.addEventListener("click", () => {
+      document.querySelectorAll(".tabs button").forEach((btn) => {
+        btn.addEventListener("click", () => {
           document.querySelectorAll(".tabs button").forEach((b) => b.classList.remove("active"));
           document.querySelectorAll("main section").forEach((s) => s.classList.remove("active"));
-          button.classList.add("active");
-          $("tab-" + button.dataset.tab).classList.add("active");
-          if (button.dataset.tab === "sources") loadSources();
-          if (button.dataset.tab === "publications") loadPublications();
-          if (button.dataset.tab === "analytics") loadAnalytics();
+          btn.classList.add("active");
+          const tabId = "tab-" + btn.dataset.tab;
+          if ($(tabId)) $(tabId).classList.add("active");
+
+          if (btn.dataset.tab === "review") loadReview();
+          if (btn.dataset.tab === "sources") loadSources();
+          if (btn.dataset.tab === "ingest") loadSourcesForIngest();
+          if (btn.dataset.tab === "publications") loadPublications();
+          if (btn.dataset.tab === "analytics") loadAnalytics();
         });
       });
     }
 
-    $("connect").addEventListener("click", connect);
-    $("apiKey").addEventListener("keydown", (event) => { if (event.key === "Enter") connect(); });
-    $("logout").addEventListener("click", () => { localStorage.removeItem("yekis.apiKey"); state.key = ""; showAuth(); });
-    $("refreshReview").addEventListener("click", loadReview);
+    // Event Listeners
+    $("connectBtn").addEventListener("click", connect);
+    $("apiKey").addEventListener("keydown", (e) => { if (e.key === "Enter") connect(); });
+    $("logoutBtn").addEventListener("click", () => {
+      localStorage.removeItem("yekis.apiKey");
+      state.key = "";
+      state.principal = null;
+      showAuth();
+      toast("Disconnected");
+    });
+
+    // Preset keys click
+    document.querySelectorAll(".quick-keys button").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        $("apiKey").value = btn.dataset.key;
+        connect();
+      });
+    });
+
+    // Preset text clicks
+    $("presetDevJob").addEventListener("click", () => {
+      $("ingestText").value = "Looking for a Senior Full Stack Engineer (Python & React). Must have experience with FastAPI, PostgreSQL, and TailwindCSS. Remote work allowed. Budget $2,500 USD for a 4-week engagement. Send portfolios.";
+    });
+    $("presetScamJob").addEventListener("click", () => {
+      $("ingestText").value = "URGENT! Guaranteed high-paying remote customer service role paying $6,000 USD per month! Must pay upfront registration fee of 500 ETB via mobile transfer before starting. No experience necessary!";
+    });
+    $("presetDataJob").addEventListener("click", () => {
+      $("ingestText").value = "Need a skilled Data Analyst with strong SQL, Python, and Tableau skills to build an executive business intelligence dashboard. 2-month contract. Budget 45,000 ETB.";
+    });
+
+    $("generateExtIdBtn").addEventListener("click", generateId);
+    $("submitIngestBtn").addEventListener("click", submitIngestion);
+    $("refreshReviewBtn").addEventListener("click", loadReview);
     $("reviewStatus").addEventListener("change", loadReview);
     $("reviewRisk").addEventListener("change", loadReview);
-    $("refreshSources").addEventListener("click", loadSources);
-    $("createSource").addEventListener("click", createSource);
-    $("refreshPublications").addEventListener("click", loadPublications);
-    $("refreshAnalytics").addEventListener("click", loadAnalytics);
-    $("reviewList").addEventListener("click", (event) => {
-      const button = event.target.closest("button[data-action]");
-      if (!button) return;
-      const id = Number(button.dataset.id);
-      if (button.dataset.action === "review") reviewAction(id, button.dataset.decision);
-      if (button.dataset.action === "save") saveFields(id);
-      if (button.dataset.action === "publish") publishAction(id);
+    $("refreshSourcesBtn").addEventListener("click", loadSources);
+    $("createSourceBtn").addEventListener("click", createSource);
+    $("refreshPublicationsBtn").addEventListener("click", loadPublications);
+    $("refreshAnalyticsBtn").addEventListener("click", loadAnalytics);
+
+    // Delegate opportunity card actions
+    $("reviewList").addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-action]");
+      if (!btn) return;
+      const id = Number(btn.dataset.id);
+      const action = btn.dataset.action;
+
+      if (action === "review") reviewAction(id, btn.dataset.decision);
+      if (action === "save") saveFields(id);
+      if (action === "publish") publishAction(id);
+      if (action === "toggle-history") toggleHistory(id);
     });
-    $("sourceList").addEventListener("click", (event) => {
-      const button = event.target.closest("button[data-source]");
-      if (button) toggleSource(Number(button.dataset.source), button.dataset.active === "true");
+
+    // Delegate source list actions
+    $("sourceList").addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-source]");
+      if (btn) toggleSource(Number(btn.dataset.source), btn.dataset.active === "true");
     });
+
+    // Delegate jump to review
+    $("ingestResult").addEventListener("click", (e) => {
+      const btn = e.target.closest("#jumpToReviewBtn");
+      if (btn) {
+        document.querySelector('.tabs button[data-tab="review"]').click();
+      }
+    });
+
     bindTabs();
-    if (state.key) { $("apiKey").value = state.key; connect(); } else { showAuth(); }
+
+    if (state.key) {
+      $("apiKey").value = state.key;
+      connect();
+    } else {
+      showAuth();
+    }
   </script>
 </body>
 </html>

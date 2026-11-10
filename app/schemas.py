@@ -67,6 +67,9 @@ class OpportunityRead(BaseModel):
     reviewed_at: datetime | None = None
     reviewed_by: str | None = None
     reviewer_note: str | None = None
+    original_text: str | None = None
+    original_url: str | None = None
+    external_id: str | None = None
     model_config = ConfigDict(from_attributes=True)
 
 

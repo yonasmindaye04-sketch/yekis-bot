@@ -177,6 +177,25 @@ Rules:
 - Test both upgrade and downgrade on a scratch database.
 - The audit path uses SQLite; the real stack uses PostgreSQL. Re-run migrations against PostgreSQL before a release.
 
+### Repairing a partially created database
+
+If `alembic upgrade head` fails with `DuplicateTable` and `alembic current` is `0002_telegram_collector`, the database already has the 0003-0005 tables but is missing the 0004 `opportunities` columns. Do not drop data. Run the one-off, idempotent repair:
+
+```powershell
+python scripts/repair_partial_schema.py
+alembic current
+alembic check
+```
+
+Expected:
+
+```text
+0005_publications (head)
+No new upgrade operations detected.
+```
+
+The repair script refuses to run unless the 0003-0005 tables exist and the recorded revision is `0002_telegram_collector`.
+
 ---
 
 ## 6. API service runbook
