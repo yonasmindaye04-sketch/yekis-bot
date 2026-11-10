@@ -37,11 +37,15 @@ class Settings(BaseSettings):
     celery_task_time_limit_seconds: int = 300
     collect_interval_seconds: int = 900
 
-    # Extraction (M3). "rules" is the safe default; "llm" is opt-in.
+    # Extraction (M3). "rules" is the safe default; "llm" (OpenAI-compatible)
+    # and "gemini" (Google AI Studio) are opt-in.
     extraction_provider: str = "rules"
     llm_api_key: str | None = None
     llm_base_url: str = "https://api.openai.com/v1"
     llm_model: str = "gpt-4o-mini"
+    gemini_api_key: str | None = None
+    gemini_base_url: str = "https://generativelanguage.googleapis.com/v1beta"
+    gemini_model: str = "gemini-2.5-flash"
     llm_timeout_seconds: float = 30.0
     llm_max_input_chars: int = 12000
     llm_max_output_tokens: int = 800

@@ -376,3 +376,44 @@ Documentation added:
 - `Dockerfile` — now copies `alembic.ini` and `migrations/` so the documented in-container migration command works.
 
 Final known gaps remain unchanged: no live Telegram/Redis/LLM/PostgreSQL verification in this environment, no live channel send, no application-level rate limiting, no CI workflow, and no stale-lock reaper for `running` jobs.
+
+---
+
+## Gemini (AI Studio) provider added after the documentation pass
+
+The LLM layer now has a first-class `gemini` provider in addition to the OpenAI-compatible `llm` provider.
+
+**Implementation**
+
+- `app/services/llm/gemini.py` — native Google Generative Language API adapter.
+  - `POST {GEMINI_BASE_URL}/models/{GEMINI_MODEL}:generateContent`
+  - key in the `x-goog-api-key` header, never in the URL or logs;
+  - `systemInstruction` carries the shared extraction prompt;
+  - content is wrapped in `<untrusted_content>`;
+  - `responseMimeType=application/json`;
+  - response is parsed and validated by the same closed `LLMOpportunity` schema;
+  - safety blocks, missing candidates, invalid JSON, and schema violations raise a normalized provider error and fall back to rules.
+- `app/services/llm/prompts.py` — shared prompt and untrusted-content wrapper.
+- `app/services/llm/parsing.py` — shared JSON/schema parsing for all providers.
+- `app/services/llm/orchestrator.py` — `EXTRACTION_PROVIDER=gemini` selects the provider; `extraction_method` is recorded as `gemini`.
+- `app/config.py` / `.env.example` — `GEMINI_API_KEY`, `GEMINI_MODEL`, `GEMINI_BASE_URL`.
+- Default model: `gemini-2.5-flash` (override with `GEMINI_MODEL`).
+
+**Configuration**
+
+```env
+EXTRACTION_PROVIDER=gemini
+GEMINI_API_KEY=<AI Studio key>
+GEMINI_MODEL=gemini-2.5-flash
+GEMINI_BASE_URL=https://generativelanguage.googleapis.com/v1beta
+```
+
+**Verification**
+
+| # | Command | Result |
+|---|---|---|
+| 1 | `pytest -q` | **104 passed** |
+| 2 | `ruff check app tests migrations` | all checks passed |
+| 3 | Gemini mock-transport tests | header/body shape, untrusted-content delimiters, no key in body/`repr`, schema rejection, safety-block handling, fallback, `extraction_method=gemini` |
+
+**Not verified:** no live Gemini request was made (no AI Studio key in the audit environment). The adapter is proven against a mock HTTP transport; a live smoke test is the next step once a key and model are available. A live failure is designed to degrade to `rules_fallback`, not to lose the post.

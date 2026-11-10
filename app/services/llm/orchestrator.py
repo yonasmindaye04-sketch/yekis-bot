@@ -18,6 +18,7 @@ from app.services.llm.base import (
     ProviderConfigurationError,
     ProviderError,
 )
+from app.services.llm.gemini import GeminiProvider
 from app.services.llm.openai_compatible import OpenAICompatibleProvider
 from app.services.llm.rules_provider import RulesProvider
 
@@ -42,8 +43,22 @@ def get_provider(settings: Settings | None = None) -> ExtractionProvider:
             max_input_chars=settings.llm_max_input_chars,
             max_output_tokens=settings.llm_max_output_tokens,
         )
+    if provider == "gemini":
+        if not settings.gemini_api_key:
+            raise ProviderConfigurationError(
+                "EXTRACTION_PROVIDER=gemini requires GEMINI_API_KEY"
+            )
+        return GeminiProvider(
+            api_key=settings.gemini_api_key,
+            base_url=settings.gemini_base_url,
+            model=settings.gemini_model,
+            timeout_seconds=settings.llm_timeout_seconds,
+            max_input_chars=settings.llm_max_input_chars,
+            max_output_tokens=settings.llm_max_output_tokens,
+        )
     raise ProviderConfigurationError(
-        f"unknown EXTRACTION_PROVIDER {settings.extraction_provider!r}; use 'rules' or 'llm'"
+        f"unknown EXTRACTION_PROVIDER {settings.extraction_provider!r}; "
+        "use 'rules', 'llm', or 'gemini'"
     )
 
 
@@ -76,7 +91,8 @@ def extract_with_provider(
 ) -> tuple[ExtractedOpportunity, str]:
     """Return ``(extracted, extraction_method)``.
 
-    ``extraction_method`` is one of ``rules``, ``llm``, or ``rules_fallback``.
+    ``extraction_method`` is ``rules``, the provider name (``llm`` or
+    ``gemini``), or ``rules_fallback``.
     """
 
     if provider is None:
@@ -96,4 +112,4 @@ def extract_with_provider(
         logger.warning("LLM extraction failed; falling back to rules: %s", exc)
         return rules_result, "rules_fallback"
 
-    return merge_safety(llm_result, rules_result), "llm"
+    return merge_safety(llm_result, rules_result), provider.name

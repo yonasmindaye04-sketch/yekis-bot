@@ -13,7 +13,7 @@ This is the practical guide for running, deploying, monitoring, and recovering t
 | Redis | 7 (compose uses `redis:7-alpine`) |
 | Docker / Compose | Docker 29 + Compose v5 were used during implementation |
 | Telegram | An authorized Telethon session for collection/publishing |
-| LLM (optional) | An OpenAI-compatible endpoint and key |
+| LLM (optional) | A Google Gemini (AI Studio) key or an OpenAI-compatible endpoint and key |
 
 ---
 
@@ -42,6 +42,25 @@ TELEGRAM_SESSION_PATH=var/telegram_collector
 PUBLISHING_ENABLED=false
 PUBLISHING_ALLOWED_CHANNELS=
 ```
+
+### Gemini extraction (optional)
+
+Yekis Intelligence supports Google Gemini directly through the AI Studio key:
+
+```env
+EXTRACTION_PROVIDER=gemini
+GEMINI_API_KEY=<your AI Studio key>
+GEMINI_MODEL=gemini-2.5-flash
+GEMINI_BASE_URL=https://generativelanguage.googleapis.com/v1beta
+```
+
+- Get the key from Google AI Studio and store it only in `.env` or a secret manager.
+- `GEMINI_MODEL` must be a model enabled for that AI Studio project.
+- The key is sent in the `x-goog-api-key` header; it is never placed in a URL or log.
+- If the model is unavailable, rate-limited, blocked by safety, or returns invalid JSON/schema, extraction falls back to rules and the opportunity stores `extraction_method=rules_fallback`.
+- Use `EXTRACTION_PROVIDER=llm` plus `LLM_API_KEY`/`LLM_BASE_URL`/`LLM_MODEL` only if you are using an OpenAI-compatible endpoint instead.
+
+Shared limits: `LLM_TIMEOUT_SECONDS`, `LLM_MAX_INPUT_CHARS`, and `LLM_MAX_OUTPUT_TOKENS` apply to both providers.
 
 Rules:
 

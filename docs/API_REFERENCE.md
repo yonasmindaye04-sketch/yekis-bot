@@ -337,7 +337,7 @@ Ordering is `quality_score DESC, id DESC`.
 }
 ```
 
-`extraction_method` is `rules`, `llm`, or `rules_fallback`.
+`extraction_method` is `rules`, `gemini`, `llm`, or `rules_fallback`.
 
 ### `GET /api/v1/opportunities/{opportunity_id}`
 

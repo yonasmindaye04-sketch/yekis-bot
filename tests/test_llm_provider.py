@@ -4,11 +4,13 @@ import httpx
 import pytest
 from pydantic import ValidationError
 
+from app.config import Settings
 from app.services.extractor import ExtractedOpportunity
 from app.services.ingestion import ingest_post
 from app.services.llm.base import ProviderConfigurationError, ProviderError, ProviderResponseError
+from app.services.llm.gemini import GeminiProvider
 from app.services.llm.openai_compatible import OpenAICompatibleProvider
-from app.services.llm.orchestrator import extract_with_provider, merge_safety
+from app.services.llm.orchestrator import extract_with_provider, get_provider, merge_safety
 from app.services.llm.schema import LLMOpportunity
 
 SCAM_TEXT = (
@@ -54,10 +56,9 @@ def _provider(payload, *, status=200, captured=None):
 
 
 class StaticProvider:
-    name = "llm"
-
-    def __init__(self, result: ExtractedOpportunity):
+    def __init__(self, result: ExtractedOpportunity, name: str = "llm"):
         self.result = result
+        self.name = name
 
     def extract(self, text: str) -> ExtractedOpportunity:
         return self.result
@@ -202,3 +203,106 @@ def test_ingestion_records_llm_as_extraction_method(db_session, source):
     assert opportunity.extraction_method == "llm"
     assert opportunity.title == "LLM-selected title"
     assert opportunity.review_status == "pending_review"
+
+
+def _gemini_provider(payload, *, status=200, captured=None):
+    def handler(request: httpx.Request) -> httpx.Response:
+        if captured is not None:
+            captured.append(request)
+        return httpx.Response(
+            status,
+            json={
+                "candidates": [
+                    {"content": {"parts": [{"text": json.dumps(payload)}]}}
+                ]
+            },
+        )
+
+    return GeminiProvider(
+        api_key="gemini-super-secret",
+        base_url="https://generativelanguage.googleapis.com/v1beta",
+        model="gemini-2.5-flash",
+        client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+
+
+def test_gemini_provider_parses_and_sends_key_in_header():
+    captured: list[httpx.Request] = []
+    provider = _gemini_provider(_payload(), captured=captured)
+
+    result = provider.extract("Looking for a React developer. Budget $300.")
+
+    assert result.title == "React dashboard"
+    assert result.budget_amount == 300.0
+    request = captured[0]
+    assert request.url.path.endswith("/models/gemini-2.5-flash:generateContent")
+    assert request.headers.get("x-goog-api-key") == "gemini-super-secret"
+
+    body = json.loads(request.content)
+    assert body["generationConfig"]["responseMimeType"] == "application/json"
+    assert body["generationConfig"]["temperature"] == 0
+    system_text = body["systemInstruction"]["parts"][0]["text"]
+    assert "You are a strict information-extraction" in system_text
+    user_text = body["contents"][0]["parts"][0]["text"]
+    assert user_text.startswith("<untrusted_content>")
+    assert user_text.endswith("</untrusted_content>")
+    assert "gemini-super-secret" not in request.content.decode()
+    assert "gemini-super-secret" not in repr(provider)
+
+
+def test_gemini_provider_rejects_unknown_fields():
+    with pytest.raises(ProviderResponseError, match="schema validation"):
+        _gemini_provider(_payload(extra_field="nope")).extract("any text")
+
+
+def test_gemini_provider_reports_safety_block_without_leaking_content():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200, json={"promptFeedback": {"blockReason": "SAFETY"}}
+        )
+
+    provider = GeminiProvider(
+        api_key="gemini-super-secret",
+        base_url="https://generativelanguage.googleapis.com/v1beta",
+        model="gemini-2.5-flash",
+        client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+    with pytest.raises(ProviderResponseError, match="SAFETY"):
+        provider.extract("any text")
+
+
+def test_gemini_provider_requires_key():
+    with pytest.raises(ProviderConfigurationError, match="GEMINI_API_KEY"):
+        GeminiProvider(api_key="", base_url="https://x.test", model="gemini-2.5-flash")
+
+
+def test_get_provider_gemini_requires_key():
+    settings = Settings(
+        database_url="sqlite+pysqlite:///:memory:",
+        extraction_provider="gemini",
+        gemini_api_key=None,
+    )
+    with pytest.raises(ProviderConfigurationError, match="GEMINI_API_KEY"):
+        get_provider(settings)
+
+
+def test_gemini_extraction_method_is_recorded():
+    result, method = extract_with_provider(
+        "Need a python developer. Pay $1,000.",
+        provider=StaticProvider(_extracted(), name="gemini"),
+    )
+    assert method == "gemini"
+    assert result.title == "LLM title"
+
+
+def test_ingestion_records_gemini_as_extraction_method(db_session, source):
+    provider = StaticProvider(_extracted(title="Gemini title"), name="gemini")
+    opportunity, _ = ingest_post(
+        db_session,
+        source_id=source.id,
+        external_id="gemini-1",
+        original_text="Looking for a Python developer. Budget $500.",
+        provider=provider,
+    )
+    assert opportunity.extraction_method == "gemini"
+    assert opportunity.title == "Gemini title"

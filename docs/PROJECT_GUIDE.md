@@ -299,15 +299,22 @@ The collector only reads public channel references. Invite links (`t.me/+...`) a
 text
   -> rules extractor (always runs)
   -> provider = get_provider()
-       rules -> return rules result, method "rules"
-       llm   -> call provider
-                 success -> merge LLM result with rules risk flags
+       rules  -> return rules result, method "rules"
+       gemini -> call Google Gemini (AI Studio key)
+       llm    -> call OpenAI-compatible endpoint
+                 success -> merge provider result with rules risk flags
                  failure -> return rules result, method "rules_fallback"
   -> risk flags unioned; risk_score = max
   -> if upfront_payment is present: budget is forced to null
 ```
 
-`extraction_method` is stored on the opportunity as `rules`, `llm`, or `rules_fallback`. The original text is always preserved on `collected_posts`; LLM output never replaces it.
+Provider options:
+
+- `EXTRACTION_PROVIDER=rules` — deterministic, no credentials, always available.
+- `EXTRACTION_PROVIDER=gemini` — native Google Generative Language API using an AI Studio key (`GEMINI_API_KEY`). The key is sent in the `x-goog-api-key` header and is never placed in a URL or log.
+- `EXTRACTION_PROVIDER=llm` — any OpenAI-compatible chat-completions endpoint (`LLM_API_KEY`, `LLM_BASE_URL`, `LLM_MODEL`).
+
+`extraction_method` is stored on the opportunity as `rules`, `gemini`, `llm`, or `rules_fallback`. The original text is always preserved on `collected_posts`; LLM output never replaces it.
 
 ### 6.4 Review and edit
 
@@ -450,13 +457,16 @@ Startup behavior:
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `EXTRACTION_PROVIDER` | `rules` | `rules` or `llm`. |
+| `EXTRACTION_PROVIDER` | `rules` | `rules`, `gemini`, or `llm`. |
+| `GEMINI_API_KEY` | unset | Required when `EXTRACTION_PROVIDER=gemini`; from Google AI Studio. |
+| `GEMINI_MODEL` | `gemini-2.5-flash` | Gemini model enabled for your AI Studio project. |
+| `GEMINI_BASE_URL` | `https://generativelanguage.googleapis.com/v1beta` | Native Gemini API base. |
 | `LLM_API_KEY` | unset | Required when `EXTRACTION_PROVIDER=llm`. |
 | `LLM_BASE_URL` | `https://api.openai.com/v1` | OpenAI-compatible base URL. |
-| `LLM_MODEL` | `gpt-4o-mini` | Model name. |
-| `LLM_TIMEOUT_SECONDS` | `30` | Outbound request timeout. |
-| `LLM_MAX_INPUT_CHARS` | `12000` | Input truncation limit. |
-| `LLM_MAX_OUTPUT_TOKENS` | `800` | Response token cap. |
+| `LLM_MODEL` | `gpt-4o-mini` | OpenAI-compatible model name. |
+| `LLM_TIMEOUT_SECONDS` | `30` | Outbound request timeout for both providers. |
+| `LLM_MAX_INPUT_CHARS` | `12000` | Input truncation limit for both providers. |
+| `LLM_MAX_OUTPUT_TOKENS` | `800` | Response token cap for both providers. |
 
 ### Publishing
 
@@ -645,7 +655,8 @@ Keep migrations compatible with both PostgreSQL and the SQLite audit path where 
 | Publishing returns `channel_not_allowed` | Destination missing from the allowlist. | Add the channel to `PUBLISHING_ALLOWED_CHANNELS`. |
 | Publishing returns `publication_unknown` | A previous attempt is still in `sending`. | Check the channel manually; do not blindly resend. |
 | Publishing returns `publication_exhausted` | Attempt cap reached. | Inspect `publications.error`; fix the cause; create a new publication flow if needed. |
-| LLM extraction never runs | `EXTRACTION_PROVIDER` is `rules`, or the key is missing. | Set the provider and key; check `extraction_method`. |
+| LLM extraction never runs | `EXTRACTION_PROVIDER` is `rules`, or the key is missing. | Set `gemini` + `GEMINI_API_KEY`, or `llm` + `LLM_API_KEY`; check `extraction_method`. |
+| LLM output looks like rules | Provider failed, was rate-limited, was safety-blocked, or returned invalid JSON/schema. | Check logs for `LLM extraction failed`; the fallback is intentional. |
 | LLM output looks like rules | Provider failed; fallback is active. | Check logs for `LLM extraction failed`; inspect the provider response/schema. |
 | `/health` returns 503 | Database probe failed. | Check PostgreSQL availability and `DATABASE_URL`. |
 | Duplicate ingestion returns 409 | `(source_id, external_id)` already exists. | Expected; reuse the existing opportunity or use a correct external id. |
@@ -656,7 +667,7 @@ Keep migrations compatible with both PostgreSQL and the SQLite audit path where 
 
 These are explicit, not hidden:
 
-- **Live integrations are not yet verified in this environment.** Telegram collection/publishing, Redis/Celery, PostgreSQL, and a real LLM endpoint were tested with fakes or SQLite. The audit records each gap.
+- **Live integrations are not yet verified in this environment.** Telegram collection/publishing, Redis/Celery, PostgreSQL, and live Gemini/OpenAI calls were tested with fakes or SQLite. The Gemini adapter is covered by a mock HTTP transport; the audit records each gap.
 - **Static API keys.** No rotation UI or per-key revocation workflow. Rotate by editing `AUTH_API_KEYS` and restarting.
 - **No rate limiting or request-body cap yet.** Keep the service on a trusted network until these land.
 - **No CI workflow committed.** Run the local quality gates before merging; the test suite is fast enough.

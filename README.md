@@ -123,7 +123,20 @@ Required environment: `TELEGRAM_ENABLED=true`, `TELEGRAM_API_ID`, `TELEGRAM_API_
 
 ## LLM extraction
 
-Extraction is behind a provider interface. The deterministic rules provider is the default and needs no credentials. The LLM provider is OpenAI-compatible, opt-in, and validated by a closed Pydantic schema (`extra="forbid"`): unknown fields, mismatched currency/amount, or out-of-range values are rejected.
+Extraction is behind a provider interface. The deterministic rules provider is the default and needs no credentials. Two opt-in LLM providers are available, and both are validated by a closed Pydantic schema (`extra="forbid"`): unknown fields, mismatched currency/amount, or out-of-range values are rejected.
+
+### Google Gemini via AI Studio (recommended when using a Gemini key)
+
+```env
+EXTRACTION_PROVIDER=gemini
+GEMINI_API_KEY=...                 # from https://aistudio.google.com/app/apikey
+GEMINI_MODEL=gemini-2.5-flash
+GEMINI_BASE_URL=https://generativelanguage.googleapis.com/v1beta
+```
+
+The native Gemini `generateContent` API is used, with the key in the `x-goog-api-key` header (never in a URL). `GEMINI_MODEL` is configurable so you can use whichever model is enabled for your AI Studio project.
+
+### OpenAI-compatible provider
 
 ```env
 EXTRACTION_PROVIDER=llm
@@ -132,7 +145,7 @@ LLM_BASE_URL=https://api.openai.com/v1
 LLM_MODEL=gpt-4o-mini
 ```
 
-Collected text is treated as untrusted data inside an explicit `<untrusted_content>` delimiter. A provider timeout, HTTP failure, malformed JSON, or schema violation falls back to the rules extractor (`extraction_method=rules_fallback`) instead of losing the post. Deterministic risk flags are always merged into LLM output, and an upfront-payment signal suppresses any extracted budget. LLM output never auto-approves anything.
+Collected text is treated as untrusted data inside an explicit `<untrusted_content>` delimiter. A provider timeout, HTTP failure, malformed JSON, or schema violation falls back to the rules extractor (`extraction_method=rules_fallback`) instead of losing the post. The stored `extraction_method` is `rules`, `gemini`, `llm`, or `rules_fallback`. Deterministic risk flags are always merged into LLM output, and an upfront-payment signal suppresses any extracted budget. LLM output never auto-approves anything.
 
 ## Background processing
 
