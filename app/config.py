@@ -17,8 +17,8 @@ class Settings(BaseSettings):
     # Service-to-service authentication (M4). JSON object:
     #   {"<api-key>": {"role": "reviewer", "name": "Ops reviewer"}}
     auth_api_keys: str = ""
+    auth_allow_anonymous_dev: bool = False
     cors_origins: str = ""
-    rate_limit_per_minute: int = 120
 
     # Telegram collector (M1). Disabled by default; credentials come from the
     # environment only and are never committed or logged.
@@ -45,11 +45,9 @@ class Settings(BaseSettings):
     llm_timeout_seconds: float = 30.0
     llm_max_input_chars: int = 12000
     llm_max_output_tokens: int = 800
-    llm_max_skills: int = 20
 
     # Publishing (M5). Never enabled by default.
     publishing_enabled: bool = False
-    publishing_channel: str = ""
     publishing_allowed_channels: str = ""
     publishing_max_attempts: int = 3
 
@@ -73,3 +71,7 @@ class Settings(BaseSettings):
 
 
 settings = Settings()  # type: ignore[call-arg]
+
+
+def get_settings() -> Settings:
+    return settings

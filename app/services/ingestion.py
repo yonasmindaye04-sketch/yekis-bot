@@ -12,7 +12,9 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models import CollectedPost, Opportunity, Source
-from app.services.extractor import ExtractedOpportunity, extract_opportunity
+from app.services.extractor import ExtractedOpportunity
+from app.services.llm.base import ExtractionProvider
+from app.services.llm.orchestrator import extract_with_provider
 
 
 class IngestionError(Exception):
@@ -41,7 +43,9 @@ def content_hash(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def _build_opportunity(post: CollectedPost, extracted: ExtractedOpportunity) -> Opportunity:
+def _build_opportunity(
+    post: CollectedPost, extracted: ExtractedOpportunity, extraction_method: str
+) -> Opportunity:
     return Opportunity(
         collected_post_id=post.id,
         opportunity_type=extracted.opportunity_type,
@@ -57,7 +61,7 @@ def _build_opportunity(post: CollectedPost, extracted: ExtractedOpportunity) -> 
         risk_flags=extracted.risk_flags,
         risk_score=extracted.risk_score,
         review_status="needs_review" if extracted.risk_flags else "pending_review",
-        extraction_method="rules",
+        extraction_method=extraction_method,
     )
 
 
@@ -70,6 +74,7 @@ def ingest_post(
     original_url: str | None = None,
     require_active_source: bool = True,
     extracted: ExtractedOpportunity | None = None,
+    provider: ExtractionProvider | None = None,
 ) -> tuple[Opportunity, bool]:
     """Persist one collected post and its opportunity.
 
@@ -105,8 +110,13 @@ def ingest_post(
     db.add(post)
     try:
         db.flush()
-        extracted = extracted or extract_opportunity(original_text)
-        opportunity = _build_opportunity(post, extracted)
+        if extracted is None:
+            extracted, extraction_method = extract_with_provider(
+                original_text, provider=provider
+            )
+        else:
+            extraction_method = "rules"
+        opportunity = _build_opportunity(post, extracted, extraction_method)
         db.add(opportunity)
         db.commit()
     except IntegrityError as exc:

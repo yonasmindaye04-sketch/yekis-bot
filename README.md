@@ -1,23 +1,26 @@
 # Yekis Intelligence
 
-Independent intelligence service for the Yekis marketplace. The first milestone provides a FastAPI service, PostgreSQL persistence, source management, manual post ingestion, deterministic opportunity extraction, and a review queue.
+Independent intelligence service for the Yekis marketplace: FastAPI, PostgreSQL, source management, Telegram collection, background processing, rule/LLM extraction, an audit-trailed review queue, and an authenticated admin dashboard.
 
 ## Architecture
 
 - Python 3.12, FastAPI, SQLAlchemy 2, Alembic, PostgreSQL
-- Redis is reserved for the next milestone's background processing
-- Telegram collection and publishing are intentionally not enabled in this first milestone
+- Redis + Celery for background collection and retries
+- Telethon for authorized-channel collection; publishing is approval-gated (M5)
+- API-key service-to-service authentication with admin/reviewer/collector/analyst roles
 - The service has no access to marketplace escrow, wallet, payout, or contract operations
 
 ## Quick start
 
 1. Copy `.env.example` to `.env`.
-2. Run `docker compose up --build`.
-3. Open `http://localhost:8100/docs`.
-4. Check `GET /health`.
-5. Create a source with `POST /api/v1/sources`.
-6. Ingest a sample post with `POST /api/v1/ingestion/manual`.
-7. Review it with `GET /api/v1/opportunities`.
+2. Run `docker compose up --build api worker beat` (or `docker compose up --build` for just the API and datastores).
+3. Check `GET /health` (public).
+4. Open `http://localhost:8100/admin/` and connect with an API key from `AUTH_API_KEYS`.
+5. Create a source with `POST /api/v1/sources` (admin key).
+6. Ingest a sample post with `POST /api/v1/ingestion/manual` (collector or admin key).
+7. Review it at `GET /api/v1/opportunities` and `PATCH /api/v1/opportunities/{id}/review` (reviewer or admin key).
+
+All `/api/v1/*` routes require `X-API-Key: <key>` (or `Authorization: Bearer <key>`). In development, `http://localhost:8100/docs` remains available; outside development the docs and OpenAPI routes are disabled. The service refuses to start outside development when `AUTH_API_KEYS` is empty.
 
 For local development, `AUTO_CREATE_SCHEMA=true` creates tables on startup. For controlled environments, set it to `false` and run `alembic upgrade head` before starting the API.
 
@@ -61,13 +64,31 @@ For local development outside Docker, set `DATABASE_URL` to your PostgreSQL inst
 
 ## API endpoints
 
-- `GET /health`
-- `POST /api/v1/sources`
-- `GET /api/v1/sources`
-- `POST /api/v1/ingestion/manual`
-- `GET /api/v1/ingestion/posts`
-- `GET /api/v1/opportunities`
-- `PATCH /api/v1/opportunities/{id}/review`
+- `GET /health` (public)
+- `GET /admin/` (static dashboard; data calls need a key)
+- `POST /api/v1/sources` (admin)
+- `GET /api/v1/sources` (any role; `limit`/`offset`)
+- `GET /api/v1/sources/{id}` (any role)
+- `PATCH /api/v1/sources/{id}` (admin)
+- `PATCH /api/v1/sources/{id}/status` (admin, JSON body `{"is_active": false}`)
+- `POST /api/v1/ingestion/manual` (collector or admin)
+- `GET /api/v1/ingestion/posts` (collector/reviewer/analyst; `source_id`, `limit`, `offset`)
+- `GET /api/v1/opportunities` (any role; `status`, `risk_only`, `limit`, `offset`)
+- `GET /api/v1/opportunities/{id}` (any role)
+- `PATCH /api/v1/opportunities/{id}/review` (reviewer or admin)
+- `PATCH /api/v1/opportunities/{id}` (reviewer or admin; records an audit event)
+- `GET /api/v1/opportunities/{id}/events` (reviewer/admin/analyst)
+
+## Authentication and review audit
+
+`AUTH_API_KEYS` is a JSON object of key → `{role, name}`. Use a distinct key per service and keep reviewer actions attributable:
+
+```env
+AUTH_API_KEYS={"dev-admin-key-change-me-01":{"role":"admin","name":"dev-admin"},"dev-reviewer-key-change-me-01":{"role":"reviewer","name":"dev-reviewer"}}
+AUTH_ALLOW_ANONYMOUS_DEV=false
+```
+
+Roles: `admin` (full access), `reviewer` (review/edit/approve), `collector` (ingest/read), `analyst` (read/analytics). Keys are compared by SHA-256 fingerprint with a constant-time comparison and are never logged. Review decisions are append-only: every status change and field edit writes a `review_events` row with the actor, previous status, new status, note, and field diff.
 
 ## Telegram collector
 
@@ -86,6 +107,19 @@ The collector only reads channels already registered as active `telegram` source
 
 Required environment: `TELEGRAM_ENABLED=true`, `TELEGRAM_API_ID`, `TELEGRAM_API_HASH`, and `TELEGRAM_SESSION_PATH` (defaults to `var/telegram_collector`, which is git-ignored). A failed run increments `consecutive_failures` and sets an exponential `next_attempt_at`; a subsequent run inside that window skips the source instead of hammering Telegram.
 
+## LLM extraction
+
+Extraction is behind a provider interface. The deterministic rules provider is the default and needs no credentials. The LLM provider is OpenAI-compatible, opt-in, and validated by a closed Pydantic schema (`extra="forbid"`): unknown fields, mismatched currency/amount, or out-of-range values are rejected.
+
+```env
+EXTRACTION_PROVIDER=llm
+LLM_API_KEY=...
+LLM_BASE_URL=https://api.openai.com/v1
+LLM_MODEL=gpt-4o-mini
+```
+
+Collected text is treated as untrusted data inside an explicit `<untrusted_content>` delimiter. A provider timeout, HTTP failure, malformed JSON, or schema violation falls back to the rules extractor (`extraction_method=rules_fallback`) instead of losing the post. Deterministic risk flags are always merged into LLM output, and an upfront-payment signal suppresses any extracted budget. LLM output never auto-approves anything.
+
 ## Background processing
 
 The Celery worker and beat scheduler use Redis as broker and backend. Durable job state, attempt counts, and dead letters live in PostgreSQL (`job_executions`, `dead_letter_jobs`), so a lost broker message cannot lose an accepted job.
@@ -101,13 +135,42 @@ celery -A app.worker.celery_app:celery_app beat --loglevel=INFO
 
 Retries are bounded by `CELERY_TASK_MAX_RETRIES` with exponential backoff and jitter. A task that exhausts its retries is written to `dead_letter_jobs` and is not retried again for the same idempotency key. Ingestion replays are idempotent: the same `(source_id, external_id)` produces one row, and a repeated job returns the original result.
 
+## Publishing
+
+Publishing is off by default (`PUBLISHING_ENABLED=false`) and fails closed when `PUBLISHING_ALLOWED_CHANNELS` is empty. A message can be created only for an opportunity whose review status is `approved`; the approval and allowlist are re-checked at send time, so rejecting a scheduled item cancels it.
+
+```bash
+# Immediate publish (reviewer or admin key)
+curl -X POST http://localhost:8100/api/v1/opportunities/1/publish \
+  -H "X-API-Key: $YI_REVIEWER_KEY" -H "Content-Type: application/json" \
+  -d '{"channel":"@ops_test_channel"}'
+
+# Schedule for later (a beat task publishes due rows every minute)
+curl -X POST http://localhost:8100/api/v1/opportunities/1/publish \
+  -H "X-API-Key: $YI_REVIEWER_KEY" -H "Content-Type: application/json" \
+  -d '{"channel":"@ops_test_channel","scheduled_at":"2026-11-11T09:00:00Z"}'
+```
+
+A `publications` row is written before the network call. A row left in `sending` after a crash is **not** automatically resent (it may already be public); the API returns `publication_unknown` so a human can reconcile it. Replaying a successful publish for the same `(opportunity, channel)` returns the original row and sends nothing. Every formatted message ends with the source name and URL; attribution is appended after truncation so it can never be cut off.
+
+## Analytics
+
+Read-only analytics are available to `analyst`, `reviewer`, and `admin` roles:
+
+- `GET /api/v1/analytics/overview` — source/post/opportunity totals, review status mix, risk count, approval rate, publication counts, last collection time.
+- `GET /api/v1/analytics/sources` — per-source volume, approval rate, average quality, risk flags, publication success/failure, and collector health.
+- `GET /api/v1/analytics/market` — skill demand, budget ranges by currency, remote share, category and opportunity-type mix.
+- `GET /api/v1/analytics/trends?days=30` — daily posts, opportunities, approvals, and publications.
+
+These aggregates read only collected content and publication records. They never touch marketplace escrow, wallet, payout, or contract data.
+
 ## Next milestones
 
 Status is tracked with evidence in [`docs/audit/MILESTONE_EXECUTION.md`](docs/audit/MILESTONE_EXECUTION.md).
 
 1. ✅ Telegram authorized-channel collector using Telethon.
 2. ✅ Redis/Celery processing pipeline and retry policy.
-3. ⏳ LLM extraction behind a provider interface with strict Pydantic validation.
-4. ⏳ Admin dashboard integration and authenticated service-to-service access.
-5. ⏳ Telegram publisher with explicit approval and attribution.
-6. ⏳ Analytics, source quality, and market insights.
+3. ✅ LLM extraction behind a provider interface with strict Pydantic validation.
+4. ✅ Admin dashboard integration and authenticated service-to-service access.
+5. ✅ Telegram publisher with explicit approval and attribution.
+6. ✅ Analytics, source quality, and market insights.

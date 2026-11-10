@@ -76,12 +76,64 @@ class Opportunity(Base):
     quality_score: Mapped[int] = mapped_column(Integer, default=0)
     risk_flags: Mapped[list] = mapped_column(JSON, default=list)
     risk_score: Mapped[int] = mapped_column(Integer, default=0)
-    review_status: Mapped[str] = mapped_column(String(30), default="pending_review")
+    review_status: Mapped[str] = mapped_column(
+        String(30), default="pending_review", index=True
+    )
     extraction_method: Mapped[str] = mapped_column(String(30), default="rules")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    reviewed_by: Mapped[str | None] = mapped_column(String(120))
+    reviewer_note: Mapped[str | None] = mapped_column(Text)
 
     post: Mapped[CollectedPost] = relationship(back_populates="opportunity")
+    events: Mapped[list["ReviewEvent"]] = relationship(
+        back_populates="opportunity", order_by="ReviewEvent.id"
+    )
+    publications: Mapped[list["Publication"]] = relationship(back_populates="opportunity")
+
+
+class Publication(Base):
+    __tablename__ = "publications"
+    __table_args__ = (
+        UniqueConstraint("opportunity_id", "channel", name="uq_publication_opportunity_channel"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    opportunity_id: Mapped[int] = mapped_column(
+        ForeignKey("opportunities.id"), nullable=False, index=True
+    )
+    channel: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="pending", index=True)
+    external_message_id: Mapped[str | None] = mapped_column(String(255))
+    scheduled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    error: Mapped[str | None] = mapped_column(Text)
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_by: Mapped[str] = mapped_column(String(120), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
+
+    opportunity: Mapped[Opportunity] = relationship(back_populates="publications")
+
+
+class ReviewEvent(Base):
+    __tablename__ = "review_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    opportunity_id: Mapped[int] = mapped_column(
+        ForeignKey("opportunities.id"), nullable=False, index=True
+    )
+    actor: Mapped[str] = mapped_column(String(120), nullable=False)
+    event_type: Mapped[str] = mapped_column(String(30), nullable=False, default="status_change")
+    from_status: Mapped[str | None] = mapped_column(String(30))
+    to_status: Mapped[str] = mapped_column(String(30), nullable=False)
+    note: Mapped[str | None] = mapped_column(Text)
+    changes: Mapped[dict | None] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    opportunity: Mapped[Opportunity] = relationship(back_populates="events")
 
 
 class JobExecution(Base):

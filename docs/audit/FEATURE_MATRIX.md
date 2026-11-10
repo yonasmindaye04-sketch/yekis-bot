@@ -112,3 +112,7 @@
 | **Total assessed capabilities** | **65** |
 
 Of 65 assessed capabilities, **7 are verified** (~11%) and **36 are absent** (~55%). Everything downstream of storage — collection, classification breadth, risk, editing, audit, publishing, analytics, frontend — is absent.
+
+## 8. Post-execution status update (2026-11-10)
+
+The six README "Next milestones" have been implemented after this baseline was written: authorized Telegram collection, Redis/Celery jobs with retries and dead letters, LLM extraction behind a strict schema, API-key auth with a review audit trail and admin dashboard, approval-gated publishing with attribution, and analytics/source-quality endpoints. The table above is preserved as the historical baseline and is not rewritten. Executed evidence, test names, and the items that still require live credentials or PostgreSQL are in `MILESTONE_EXECUTION.md`.

@@ -156,3 +156,43 @@ def collect_telegram_task(
         "error": outcome.error,
         "job_id": outcome.job_id,
     }
+
+
+@celery_app.task(bind=True, name="yekis.publish_due")
+def publish_due_task(self) -> dict:
+    from app.integrations.telegram.publisher import TelethonPublisher
+    from app.services.publishing import publish_due
+
+    task_id = getattr(getattr(self, "request", None), "id", None)
+    key = f"publish-due:{task_id}" if task_id else None
+
+    with SessionLocal() as db:
+        def work() -> dict:
+            async def _publish():
+                publisher = TelethonPublisher()
+                try:
+                    results = await publish_due(db, publisher=publisher, settings=settings)
+                finally:
+                    await publisher.close()
+                return [
+                    {"id": item.id, "status": item.status}
+                    for item in results
+                ]
+
+            return {"publications": asyncio.run(_publish())}
+
+        outcome = run_job(
+            db,
+            task_name="yekis.publish_due",
+            idempotency_key=key or "publish-due",
+            fn=work,
+            payload=None,
+            max_attempts=1,
+        )
+    return {
+        "status": outcome.status,
+        "attempts": outcome.attempts,
+        "value": outcome.value,
+        "error": outcome.error,
+        "job_id": outcome.job_id,
+    }

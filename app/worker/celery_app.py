@@ -37,6 +37,10 @@ celery_app.conf.beat_schedule = {
         "task": "yekis.collect_telegram",
         "schedule": settings.collect_interval_seconds,
     },
+    "publish-due": {
+        "task": "yekis.publish_due",
+        "schedule": 60,
+    },
 }
 
 __all__ = ["celery_app"]

@@ -1,0 +1,427 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Yekis Intelligence · Admin</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #0f1419; --panel: #171e26; --panel-2: #1f2933; --line: #2c3947;
+      --text: #e7edf4; --muted: #93a4b8; --accent: #4fd1c5; --warn: #f6ad55;
+      --danger: #fc8181; --ok: #68d391; --radius: 10px;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); }
+    header { padding: 18px 24px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+    header h1 { font-size: 18px; margin: 0; letter-spacing: .3px; }
+    header .spacer { flex: 1; }
+    .pill { font-size: 12px; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+    .pill.ok { color: var(--ok); border-color: #2f5d43; }
+    .pill.bad { color: var(--danger); border-color: #6b2b2b; }
+    main { max-width: 1180px; margin: 0 auto; padding: 22px; }
+    section { display: none; }
+    section.active { display: block; }
+    .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; margin-bottom: 16px; }
+    .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    .grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
+    label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 5px; }
+    input, select, textarea { width: 100%; padding: 9px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel-2); color: var(--text); font: inherit; }
+    textarea { min-height: 64px; resize: vertical; }
+    button { padding: 9px 13px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel-2); color: var(--text); cursor: pointer; font: inherit; }
+    button:hover { border-color: var(--accent); }
+    button.primary { background: var(--accent); color: #062320; border-color: var(--accent); font-weight: 600; }
+    button.danger { color: var(--danger); }
+    button.small { padding: 5px 9px; font-size: 12px; }
+    .tabs { display: flex; gap: 6px; margin-bottom: 18px; flex-wrap: wrap; }
+    .tabs button.active { border-color: var(--accent); color: var(--accent); }
+    .item { border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; margin-bottom: 12px; background: var(--panel); }
+    .item h3 { margin: 0 0 6px; font-size: 15px; }
+    .muted { color: var(--muted); font-size: 12px; }
+    .badge { display: inline-block; font-size: 11px; padding: 2px 7px; border-radius: 999px; border: 1px solid var(--line); margin: 2px 4px 2px 0; color: var(--muted); }
+    .badge.risk { color: var(--warn); border-color: #6b5325; }
+    .badge.approved { color: var(--ok); border-color: #2f5d43; }
+    .badge.rejected { color: var(--danger); border-color: #6b2b2b; }
+    .badge.needs_review { color: var(--warn); border-color: #6b5325; }
+    .error { color: var(--danger); background: #2a1717; border: 1px solid #6b2b2b; padding: 10px 12px; border-radius: 8px; margin: 10px 0; white-space: pre-wrap; }
+    .empty { color: var(--muted); padding: 18px; text-align: center; border: 1px dashed var(--line); border-radius: var(--radius); }
+    .loading { color: var(--muted); padding: 12px 0; }
+    pre { white-space: pre-wrap; word-break: break-word; }
+    .hidden { display: none !important; }
+    .auth { max-width: 620px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Yekis Intelligence</h1>
+    <span class="pill" id="connection">not connected</span>
+    <div class="spacer"></div>
+    <button class="small" id="logout">Forget key</button>
+  </header>
+  <main>
+    <div class="card auth" id="authPanel">
+      <h2 style="margin-top:0">Admin access</h2>
+      <p class="muted">Enter a service API key. It is kept in this browser's local storage and sent as <code>X-API-Key</code>. Reviewer keys can review; admin keys can also manage sources.</p>
+      <label for="apiKey">API key</label>
+      <input id="apiKey" type="password" autocomplete="off" placeholder="Paste your API key">
+      <div class="row" style="margin-top:12px">
+        <button class="primary" id="connect">Connect</button>
+        <span class="muted" id="authMessage"></span>
+      </div>
+      <div class="error hidden" id="authError"></div>
+    </div>
+
+    <div id="workspace" class="hidden">
+      <div class="tabs">
+        <button data-tab="review" class="active">Review queue</button>
+        <button data-tab="sources">Sources</button>
+        <button data-tab="publications">Publications</button>
+        <button data-tab="analytics">Analytics</button>
+      </div>
+
+      <section id="tab-review" class="active">
+        <div class="card">
+          <div class="row">
+            <div><label>Status</label>
+              <select id="reviewStatus">
+                <option value="pending_review">pending_review</option>
+                <option value="needs_review">needs_review</option>
+                <option value="approved">approved</option>
+                <option value="rejected">rejected</option>
+                <option value="">all</option>
+              </select>
+            </div>
+            <div><label>Filter</label>
+              <select id="reviewRisk"><option value="false">all</option><option value="true">risk flagged only</option></select>
+            </div>
+            <div style="align-self:end"><button id="refreshReview">Refresh</button></div>
+          </div>
+        </div>
+        <div id="reviewList"><div class="loading">Loading…</div></div>
+      </section>
+
+      <section id="tab-sources">
+        <div class="card">
+          <h3 style="margin-top:0">Register source</h3>
+          <div class="grid">
+            <div><label>Name</label><input id="srcName" placeholder="Channel or site name"></div>
+            <div><label>Type</label>
+              <select id="srcType"><option>telegram</option><option>manual</option><option>website</option><option>rss</option></select>
+            </div>
+            <div><label>URL</label><input id="srcUrl" placeholder="https://t.me/channel"></div>
+            <div><label>Category</label><input id="srcCategory" placeholder="software"></div>
+          </div>
+          <div class="row" style="margin-top:12px"><button class="primary" id="createSource">Create source</button></div>
+          <div class="error hidden" id="sourceError"></div>
+        </div>
+        <div class="card"><div class="row"><button id="refreshSources">Refresh sources</button></div></div>
+        <div id="sourceList"><div class="loading">Loading…</div></div>
+      </section>
+
+      <section id="tab-publications">
+        <div class="card"><div class="row"><button id="refreshPublications">Refresh publications</button></div></div>
+        <div id="publicationList"><div class="loading">Loading…</div></div>
+      </section>
+
+      <section id="tab-analytics">
+        <div class="card"><div class="row"><button id="refreshAnalytics">Refresh analytics</button></div></div>
+        <div id="analyticsBody"><div class="loading">Loading…</div></div>
+      </section>
+    </div>
+  </main>
+
+  <script>
+    const state = { key: localStorage.getItem("yekis.apiKey") || "" };
+    const $ = (id) => document.getElementById(id);
+    const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+    function setConnection(label, ok) {
+      const node = $("connection");
+      node.textContent = label;
+      node.className = "pill " + (ok ? "ok" : "bad");
+    }
+
+    async function api(path, options = {}) {
+      const response = await fetch(path, {
+        ...options,
+        headers: {
+          "Content-Type": "application/json",
+          "X-API-Key": state.key,
+          ...(options.headers || {}),
+        },
+      });
+      const text = await response.text();
+      let body = null;
+      try { body = text ? JSON.parse(text) : null; } catch { body = text; }
+      if (!response.ok) {
+        const detail = body && body.detail ? body.detail : body;
+        const message = typeof detail === "string" ? detail : (detail && (detail.message || detail.code)) || JSON.stringify(detail);
+        const error = new Error(message || `HTTP ${response.status}`);
+        error.status = response.status;
+        throw error;
+      }
+      return body;
+    }
+
+    function showError(node, error) {
+      node.textContent = error ? String(error.message || error) : "";
+      node.classList.toggle("hidden", !error);
+    }
+
+    function badge(text, cls = "") { return `<span class="badge ${cls}">${esc(text)}</span>`; }
+
+    function riskBadges(opportunity) {
+      const flags = opportunity.risk_flags || [];
+      if (!flags.length) return "";
+      return flags.map((flag) => badge(flag, "risk")).join("");
+    }
+
+    function money(opportunity) {
+      if (opportunity.budget_amount == null) return "budget unknown";
+      return `${opportunity.budget_amount} ${opportunity.budget_currency || ""}`.trim();
+    }
+
+    function reviewCard(item) {
+      const id = `opp-${item.id}`;
+      const note = item.reviewer_note ? `<div class="muted">Note: ${esc(item.reviewer_note)}</div>` : "";
+      return `<div class="item" id="${id}">
+        <div class="row" style="justify-content:space-between">
+          <h3>#${item.id} · ${esc(item.title)}</h3>
+          <span>${badge(item.review_status, item.review_status)}</span>
+        </div>
+        <div class="muted">${esc(item.opportunity_type)} · ${esc(item.category || "uncategorized")} · ${esc(money(item))} · quality ${item.quality_score} · risk ${item.risk_score} · ${esc(item.extraction_method)}</div>
+        <div style="margin:6px 0">${riskBadges(item)}</div>
+        <div class="muted">${esc(item.description || "").slice(0, 420)}</div>
+        ${note}
+        <div class="grid" style="margin-top:12px">
+          <div><label>Note</label><input id="note-${item.id}" maxlength="2000" placeholder="Why this decision?"></div>
+          <div><label>Title</label><input id="title-${item.id}" value="${esc(item.title)}"></div>
+          <div><label>Category</label><input id="category-${item.id}" value="${esc(item.category || "")}"></div>
+          <div><label>Duration</label><input id="duration-${item.id}" value="${esc(item.duration || "")}"></div>
+          <div><label>Budget</label><input id="budget-${item.id}" type="number" step="0.01" min="0" value="${item.budget_amount ?? ""}"></div>
+          <div><label>Currency</label>
+            <select id="currency-${item.id}"><option value="">none</option><option ${item.budget_currency === "USD" ? "selected" : ""}>USD</option><option ${item.budget_currency === "ETB" ? "selected" : ""}>ETB</option></select>
+          </div>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <button class="primary small" data-action="review" data-id="${item.id}" data-decision="approved">Approve</button>
+          <button class="small" data-action="review" data-id="${item.id}" data-decision="needs_review">Needs review</button>
+          <button class="small danger" data-action="review" data-id="${item.id}" data-decision="rejected">Reject</button>
+          <button class="small" data-action="save" data-id="${item.id}">Save fields</button>
+          ${item.review_status === "approved" ? `<button class="small" data-action="publish" data-id="${item.id}">Publish</button>` : ""}
+          <span class="muted" id="msg-${item.id}"></span>
+        </div>
+      </div>`;
+    }
+
+    async function loadReview() {
+      const list = $("reviewList");
+      list.innerHTML = '<div class="loading">Loading…</div>';
+      try {
+        const params = new URLSearchParams({ limit: "100" });
+        if ($("reviewStatus").value) params.set("status", $("reviewStatus").value);
+        if ($("reviewRisk").value === "true") params.set("risk_only", "true");
+        const items = await api("/api/v1/opportunities?" + params.toString());
+        list.innerHTML = items.length ? items.map(reviewCard).join("") : '<div class="empty">No opportunities match this filter.</div>';
+      } catch (error) {
+        list.innerHTML = `<div class="error">${esc(error.message)}</div>`;
+        if (error.status === 401) showAuth();
+      }
+    }
+
+    async function reviewAction(id, decision) {
+      const message = $(`msg-${id}`);
+      message.textContent = "Saving…";
+      try {
+        await api(`/api/v1/opportunities/${id}/review`, {
+          method: "PATCH",
+          body: JSON.stringify({ decision, reviewer_note: $(`note-${id}`).value || null }),
+        });
+        await loadReview();
+      } catch (error) {
+        message.textContent = error.message;
+      }
+    }
+
+    async function publishAction(id) {
+      const channel = prompt("Channel to publish to (for example @ops_test_channel):", "");
+      if (!channel) return;
+      const message = $(`msg-${id}`);
+      message.textContent = "Publishing…";
+      try {
+        const publication = await api(`/api/v1/opportunities/${id}/publish`, {
+          method: "POST",
+          body: JSON.stringify({ channel }),
+        });
+        message.textContent = `publication ${publication.id}: ${publication.status}`;
+      } catch (error) {
+        message.textContent = error.message;
+      }
+    }
+
+    async function saveFields(id) {
+      const message = $(`msg-${id}`);
+      const amount = $(`budget-${id}`).value;
+      const currency = $(`currency-${id}`).value;
+      const payload = {
+        title: $(`title-${id}`).value,
+        category: $(`category-${id}`).value || null,
+        duration: $(`duration-${id}`).value || null,
+        budget_amount: amount === "" ? null : Number(amount),
+        budget_currency: currency || null,
+      };
+      message.textContent = "Saving…";
+      try {
+        await api(`/api/v1/opportunities/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
+        await loadReview();
+      } catch (error) {
+        message.textContent = error.message;
+      }
+    }
+
+    async function loadSources() {
+      const list = $("sourceList");
+      list.innerHTML = '<div class="loading">Loading…</div>';
+      try {
+        const items = await api("/api/v1/sources?limit=200");
+        list.innerHTML = items.length ? items.map((source) => `<div class="item">
+          <div class="row" style="justify-content:space-between">
+            <h3>${esc(source.name)} <span class="muted">#${source.id}</span></h3>
+            <span>${badge(source.is_active ? "active" : "inactive", source.is_active ? "approved" : "rejected")}</span>
+          </div>
+          <div class="muted">${esc(source.source_type)} · ${esc(source.source_url)} · ${esc(source.category || "uncategorized")}</div>
+          <div class="muted">last success: ${esc(source.last_success_at || "never")} · failures: ${source.consecutive_failures}</div>
+          ${source.last_error ? `<div class="error">${esc(source.last_error)}</div>` : ""}
+          <div class="row" style="margin-top:8px"><button class="small" data-source="${source.id}" data-active="${source.is_active ? "false" : "true"}">${source.is_active ? "Deactivate" : "Activate"}</button></div>
+        </div>`).join("") : '<div class="empty">No sources yet. Register one above.</div>';
+      } catch (error) {
+        list.innerHTML = `<div class="error">${esc(error.message)}</div>`;
+        if (error.status === 401) showAuth();
+      }
+    }
+
+    async function createSource() {
+      showError($("sourceError"), null);
+      try {
+        await api("/api/v1/sources", {
+          method: "POST",
+          body: JSON.stringify({
+            name: $("srcName").value,
+            source_type: $("srcType").value,
+            source_url: $("srcUrl").value,
+            category: $("srcCategory").value || null,
+            is_active: true,
+          }),
+        });
+        $("srcName").value = ""; $("srcUrl").value = ""; $("srcCategory").value = "";
+        await loadSources();
+      } catch (error) {
+        showError($("sourceError"), error);
+      }
+    }
+
+    async function toggleSource(id, active) {
+      try {
+        await api(`/api/v1/sources/${id}/status`, { method: "PATCH", body: JSON.stringify({ is_active: active }) });
+        await loadSources();
+      } catch (error) {
+        alert(error.message);
+      }
+    }
+
+    async function loadPublications() {
+      const list = $("publicationList");
+      list.innerHTML = '<div class="loading">Loading…</div>';
+      try {
+        const items = await api("/api/v1/publications?limit=100");
+        list.innerHTML = items.length ? items.map((item) => `<div class="item">
+          <div class="row" style="justify-content:space-between"><h3>#${item.id} · opportunity ${item.opportunity_id}</h3><span>${badge(item.status)}</span></div>
+          <div class="muted">channel: ${esc(item.channel)} · external id: ${esc(item.external_message_id || "—")} · attempts: ${item.attempts}</div>
+          ${item.error ? `<div class="error">${esc(item.error)}</div>` : ""}
+        </div>`).join("") : '<div class="empty">No publications yet. Approve an opportunity and publish it from the API.</div>';
+      } catch (error) {
+        list.innerHTML = `<div class="error">${esc(error.message)}</div>`;
+      }
+    }
+
+    async function loadAnalytics() {
+      const body = $("analyticsBody");
+      body.innerHTML = '<div class="loading">Loading…</div>';
+      try {
+        const data = await api("/api/v1/analytics/overview");
+        body.innerHTML = `<div class="grid">${Object.entries(data).map(([key, value]) => `<div class="card"><div class="muted">${esc(key)}</div><pre>${esc(typeof value === "object" ? JSON.stringify(value, null, 2) : value)}</pre></div>`).join("")}</div>`;
+      } catch (error) {
+        body.innerHTML = `<div class="error">${esc(error.message)}</div>`;
+      }
+    }
+
+    function showAuth() {
+      $("authPanel").classList.remove("hidden");
+      $("workspace").classList.add("hidden");
+      setConnection("not connected", false);
+    }
+
+    function showWorkspace() {
+      $("authPanel").classList.add("hidden");
+      $("workspace").classList.remove("hidden");
+      setConnection("connected", true);
+      loadReview();
+    }
+
+    async function connect() {
+      state.key = $("apiKey").value.trim();
+      showError($("authError"), null);
+      if (!state.key) { showError($("authError"), "Enter an API key."); return; }
+      try {
+        await api("/api/v1/sources?limit=1");
+        localStorage.setItem("yekis.apiKey", state.key);
+        $("authMessage").textContent = "Connected";
+        showWorkspace();
+      } catch (error) {
+        showError($("authError"), error);
+        setConnection("authentication failed", false);
+      }
+    }
+
+    function bindTabs() {
+      document.querySelectorAll(".tabs button").forEach((button) => {
+        button.addEventListener("click", () => {
+          document.querySelectorAll(".tabs button").forEach((b) => b.classList.remove("active"));
+          document.querySelectorAll("main section").forEach((s) => s.classList.remove("active"));
+          button.classList.add("active");
+          $("tab-" + button.dataset.tab).classList.add("active");
+          if (button.dataset.tab === "sources") loadSources();
+          if (button.dataset.tab === "publications") loadPublications();
+          if (button.dataset.tab === "analytics") loadAnalytics();
+        });
+      });
+    }
+
+    $("connect").addEventListener("click", connect);
+    $("apiKey").addEventListener("keydown", (event) => { if (event.key === "Enter") connect(); });
+    $("logout").addEventListener("click", () => { localStorage.removeItem("yekis.apiKey"); state.key = ""; showAuth(); });
+    $("refreshReview").addEventListener("click", loadReview);
+    $("reviewStatus").addEventListener("change", loadReview);
+    $("reviewRisk").addEventListener("change", loadReview);
+    $("refreshSources").addEventListener("click", loadSources);
+    $("createSource").addEventListener("click", createSource);
+    $("refreshPublications").addEventListener("click", loadPublications);
+    $("refreshAnalytics").addEventListener("click", loadAnalytics);
+    $("reviewList").addEventListener("click", (event) => {
+      const button = event.target.closest("button[data-action]");
+      if (!button) return;
+      const id = Number(button.dataset.id);
+      if (button.dataset.action === "review") reviewAction(id, button.dataset.decision);
+      if (button.dataset.action === "save") saveFields(id);
+      if (button.dataset.action === "publish") publishAction(id);
+    });
+    $("sourceList").addEventListener("click", (event) => {
+      const button = event.target.closest("button[data-source]");
+      if (button) toggleSource(Number(button.dataset.source), button.dataset.active === "true");
+    });
+    bindTabs();
+    if (state.key) { $("apiKey").value = state.key; connect(); } else { showAuth(); }
+  </script>
+</body>
+</html>

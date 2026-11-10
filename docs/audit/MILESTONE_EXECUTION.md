@@ -142,16 +142,209 @@ Environment: Python 3.15.1 (host; declared target remains 3.12), SQLite used onl
 
 ## M3 — LLM extraction provider with strict Pydantic validation
 
-**Status:** PENDING
+**Status:** IMPLEMENTED AND VERIFIED WITH A FAKE HTTP TRANSPORT; NO LIVE MODEL CALL MADE
+**README item:** 3. LLM extraction behind a provider interface with strict Pydantic validation.
+
+### Scope delivered
+
+- `ExtractionProvider` protocol with `rules` and OpenAI-compatible `llm` implementations; selection by `EXTRACTION_PROVIDER`.
+- Closed `LLMOpportunity` Pydantic schema: `extra="forbid"`, enums for type/category/currency/risk flags, bounds on budget/score/skills/title/description, skill de-duplication, and a model-level rule that amount and currency are set together.
+- Strict response handling: JSON extraction, fenced-JSON tolerance, envelope checks, schema validation, and field-path-only error messages (model output is never echoed).
+- Prompt-injection isolation: collected text is untrusted data inside `<untrusted_content>` tags with an explicit instruction not to follow embedded instructions.
+- Cost/abuse limits: input truncation, `max_tokens`, request timeout, and no key in logs or `repr`.
+- Safety merge: deterministic risk flags and risk score are unioned into LLM output; an upfront-payment flag suppresses the extracted budget. A provider failure falls back to `rules` (`rules_fallback`) and does not drop the post.
+- Ingestion records `extraction_method` as `rules`, `llm`, or `rules_fallback`.
+
+### Executed evidence
+
+| # | Command | Result |
+|---|---|---|
+| 1 | `pytest -q` | **42 passed** |
+| 2 | `ruff check app tests migrations` | all checks passed |
+| 3 | Fake HTTP transport tests | valid JSON accepted; unknown field, invalid JSON, and mismatched currency/amount rejected |
+
+### Behaviour proven by tests
+
+| Behaviour | Test |
+|---|---|
+| A valid response is validated and mapped to the domain object | `test_valid_llm_response_is_validated_and_mapped` |
+| Unknown response fields are rejected | `test_unknown_fields_are_rejected` |
+| Amount/currency must be set together | `test_budget_currency_must_match_amount` |
+| Non-JSON content is rejected | `test_invalid_json_is_rejected` |
+| Injection text stays in the user data block; the key is not in the body or `repr` | `test_prompt_injection_stays_inside_untrusted_content` |
+| A missing key refuses provider construction | `test_provider_refuses_to_start_without_api_key` |
+| Provider failure falls back to rules | `test_llm_failure_falls_back_to_rules` |
+| LLM output cannot hide deterministic risk or a bait budget | `test_llm_result_cannot_hide_deterministic_risk_flags_or_bait_budget` |
+| Deterministic extraction fills gaps in LLM output | `test_merge_safety_fills_missing_category_and_skills_from_rules` |
+| Ingestion persists `extraction_method=llm` | `test_ingestion_records_llm_as_extraction_method` |
+
+### Not verified (explicitly)
+
+- **No live LLM request was made.** There is no API key in this environment and the tests use `httpx.MockTransport`, so model quality, latency, and provider-specific `response_format` behavior are unmeasured. Do not claim production extraction quality from these results.
+- **No cost or token-usage measurement.** The limits are enforced client-side; actual billing depends on the provider.
+
+### Remaining risk
+
+- Prompt injection is mitigated, not eliminated. The schema and human-review routing bound the impact: injected text cannot add fields or suppress deterministic risk flags, and no LLM output is published without approval.
+- The LLM could still produce a plausible but incorrect title/skills/budget. That is why every extracted opportunity remains a candidate for human review.
+- `response_format=json_object` is assumed; a provider that rejects it will produce a `rules_fallback` result until the adapter is extended.
 
 ## M4 — Admin dashboard integration and authenticated service-to-service access
 
-**Status:** PENDING
+**Status:** IMPLEMENTED AND VERIFIED IN TESTS; LIVE BROWSER/POSTGRES RUN PENDING
+**README item:** 4. Admin dashboard integration and authenticated service-to-service access.
+
+### Scope delivered
+
+- API-key authentication (`X-API-Key` or `Authorization: Bearer`) with SHA-256 fingerprint lookup and `hmac.compare_digest`; raw keys are not retained after parsing and are never logged.
+- Roles: `admin` (full), `reviewer` (review/edit/approve), `collector` (ingest/read), `analyst` (read/analytics). `admin` passes every role check.
+- Role matrix applied per route: source mutation is admin-only; ingestion is collector/admin; review/edit is reviewer/admin; reads are role-scoped.
+- Startup fails outside development when `AUTH_API_KEYS` is empty. Docs, Redoc, and OpenAPI are disabled outside development.
+- Review integrity: `reviewer_note` and `reviewed_by` persistence, an append-only `review_events` table (actor, event type, from/to status, note, field diff), explicit transition rules, and idempotent repeated decisions.
+- Field editing endpoint with before/after audit rows.
+- Source JSON-body update and status endpoints; pagination caps on list endpoints; 409 for illegal transitions; 404s for unknown resources.
+- `/health` now returns **503** when the database probe fails, without leaking the driver error.
+- Static admin dashboard at `/admin/` (no build step): key login, review queue with notes and field editing, source management, publications placeholder, analytics placeholder, loading/empty/error states.
+- Explicit CORS allowlist support; wildcard origins are not used.
+- Migration `0004_review_audit`.
+
+### Executed evidence
+
+| # | Command | Result |
+|---|---|---|
+| 1 | `pytest -q` | **75 passed** |
+| 2 | `ruff check app tests migrations` | all checks passed |
+| 3 | `alembic upgrade head` on a fresh scratch DB | 0001 → 0004 applied |
+| 4 | `alembic check` | `No new upgrade operations detected.` |
+| 5 | `docker compose config -q` | exit 0 |
+
+### Behaviour proven by tests
+
+| Behaviour | Test |
+|---|---|
+| Every protected route returns 401 without credentials | `tests/test_auth.py::test_protected_routes_require_credentials` |
+| Invalid keys are rejected; Bearer keys are accepted | `test_invalid_key_is_rejected`, `test_bearer_token_is_accepted` |
+| Reviewer cannot mutate sources; admin can | `test_reviewer_cannot_create_source`, `test_admin_can_create_source` |
+| Collector/analyst cannot review; reviewer can and is attributed | `test_collector_and_analyst_cannot_review`, `test_reviewer_can_review_and_is_recorded` |
+| Docs/OpenAPI are disabled outside development | `test_docs_and_openapi_are_disabled_outside_development` |
+| Startup fails without keys in production | `test_security_config_fails_loudly_without_keys_in_production` |
+| Missing/invalid keys and roles are rejected at config load | `test_load_credentials_*` |
+| Review notes round-trip and create exactly one audit event | `test_review_note_round_trip_and_event` |
+| Repeated decisions are idempotent; illegal transitions are 409 | `test_repeating_the_same_decision_is_idempotent`, `test_illegal_transition_returns_409` |
+| Field edits record before/after changes | `test_field_edit_is_recorded_with_before_and_after` |
+| Source update/status use JSON bodies and caps | `tests/test_sources_api.py` |
+| `/health` is 200 with a DB and 503 without | `tests/test_health.py` |
+| Dashboard is served and contains the review queue | `test_dashboard_is_served` |
+
+### Not verified (explicitly)
+
+- **No real browser session and no live server/PostgreSQL run.** The dashboard is asserted as served HTML; its API calls are the same endpoints covered by tests, but a human click-through was not executed in this environment.
+- **No live auth against the Express/marketplace backend.** The header contract is documented, not integrated externally.
+- **No rate limiting or request-body cap.** These remain on the security backlog; the service should stay on a trusted network until they land.
+
+### Remaining risk
+
+- API keys are long-lived static credentials. Rotation and per-service revocation are manual; there is no key-management UI.
+- The dashboard stores the key in `localStorage`, which is acceptable for a same-origin internal tool but means any XSS on that origin can read it. The dashboard does not render untrusted HTML (all values are escaped).
+- CORS is disabled when `CORS_ORIGINS` is empty; a separately hosted frontend must set an explicit origin list.
+- The `review_events` table is append-only by policy and API design, but a database superuser can still modify it; there is no cryptographic tamper evidence.
 
 ## M5 — Telegram publisher with explicit approval and attribution
 
-**Status:** PENDING
+**Status:** IMPLEMENTED AND VERIFIED WITH A FAKE PUBLISHER; NO LIVE TELEGRAM SEND
+**README item:** 5. Telegram publisher with explicit approval and attribution.
+
+### Scope delivered
+
+- `Publication` model with one row per `(opportunity, channel)`, status, attempts, external message id, schedule, published time, error, and attribution actor; migration `0005_publications`.
+- Publishing is disabled by default and fails closed when the channel allowlist is empty.
+- Guard order is explicit: approved opportunity → publishing enabled → allowlisted channel → approved state re-checked at send time.
+- `sending` is committed before the Telegram call. A row left in `sending` is never automatically resent; the API returns `publication_unknown` for human reconciliation. Replaying a published row returns the original and sends nothing.
+- Scheduling: `scheduled_at` creates a `scheduled` row; a beat task (`yekis.publish_due`, every minute) publishes only due rows and re-checks approval.
+- Formatter always appends `Source: <name>` and the source URL after truncation, so attribution cannot be cut off.
+- Per-opportunity attempt cap via `PUBLISHING_MAX_ATTEMPTS`; failures are persisted with a bounded error.
+- Admin dashboard has a Publish action for approved items; the publications tab lists records.
+
+### Executed evidence
+
+| # | Command | Result |
+|---|---|---|
+| 1 | `pytest -q` | **90 passed** (M5 checkpoint) |
+| 2 | `alembic upgrade head` on a fresh scratch DB | 0001 → 0005 applied |
+| 3 | `alembic check` | `No new upgrade operations detected.` |
+| 4 | `ruff check app tests migrations` | all checks passed |
+
+### Behaviour proven by tests
+
+| Behaviour | Test |
+|---|---|
+| Unapproved opportunity cannot publish and creates no row | `test_unapproved_opportunity_cannot_be_published` |
+| Disabled publishing sends nothing | `test_publishing_disabled_sends_nothing` |
+| Channel must be allowlisted | `test_channel_must_be_allowlisted` |
+| Successful publish sends once and includes source name/URL | `test_publish_sends_once_with_attribution` |
+| Replay returns the same row and does not double-send | `test_replaying_the_same_publication_does_not_double_send` |
+| A `sending` row is never resent automatically | `test_a_sending_row_is_never_resent_automatically` |
+| Failed send is recorded and can be retried | `test_failed_send_is_recorded_and_can_be_retried` |
+| Scheduled rows wait and publish when due | `test_scheduled_publication_waits_for_due_time` |
+| Approval is re-checked at send time | `test_approval_is_rechecked_at_send_time` |
+| Formatter keeps attribution after truncation | `test_formatting_always_keeps_attribution` |
+| API auth, disabled mode, and unapproved guards | `tests/test_publications_api.py` |
+
+### Not verified (explicitly)
+
+- **No live Telegram send was performed.** Tests use `FakePublisher`; `TelethonPublisher` compiles and its credential/session guard is present, but no message reached a channel. Live verification requires owner approval and a private test channel, per the baseline rules.
+- **No live beat/worker run.** `publish_due` is tested directly; the Celery wrapper and beat schedule are configured but were not run against a broker.
+
+### Remaining risk
+
+- Telegram has no idempotency key. The `sending` state is the chosen safety trade-off: at-most-once attempt, at the cost of manual reconciliation after a crash.
+- A reviewer can revoke approval after scheduling; the send-time re-check prevents the send, but an already published message cannot be unsent by this service.
+- The allowlist is an environment string; changing it requires a restart/config update.
+
+---
 
 ## M6 — Analytics, source quality, and market insights
 
-**Status:** PENDING
+**Status:** IMPLEMENTED AND VERIFIED IN TESTS
+**README item:** 6. Analytics, source quality, and market insights.
+
+### Scope delivered
+
+- Read-only analytics service (`app/services/analytics.py`) and endpoints under `/api/v1/analytics`:
+  - `overview` — source/post/opportunity totals, status mix, type/category buckets, budget ranges by currency, risk count, average quality, approval rate, publication counts, last collection time.
+  - `sources` — per-source posts, opportunities, review mix, approval rate, risk flags, average quality, publication success/failure, collector health.
+  - `market` — skill demand, budget ranges/median by currency, remote share, category/type mix.
+  - `trends` — daily posts, opportunities, approvals, publications over a bounded 1–365 day window.
+- Role guard: `analyst`, `reviewer`, and `admin`; `collector` and anonymous callers are refused.
+- Analytics read only collected content and publication records; no marketplace financial tables or APIs are touched.
+
+### Executed evidence
+
+| # | Command | Result |
+|---|---|---|
+| 1 | `pytest -q` | **96 passed** |
+| 2 | `ruff check app tests migrations` | all checks passed |
+| 3 | `alembic check` | `No new upgrade operations detected.` |
+| 4 | `docker compose config -q` | exit 0 |
+
+### Behaviour proven by tests
+
+| Behaviour | Test |
+|---|---|
+| Overview totals, statuses, risk, approval rate, publication counts | `test_overview_counts_and_statuses` |
+| Per-source quality rollup | `test_source_quality_rollup` |
+| Skill demand, budget ranges, and remote share | `test_market_insights_skills_budget_and_remote` |
+| Trend buckets merge posts/reviews/publications | `test_trends_include_posts_reviews_and_publications` |
+| Trend window rejects 0 and 366 days | `test_trends_window_is_bounded` |
+| Analyst/reviewer/admin can read; collector/anonymous cannot | `test_analytics_requires_analyst_or_reviewer` |
+
+### Not verified (explicitly)
+
+- **No production-volume performance measurement.** The service loads skill arrays and budget values for in-process aggregation, which is appropriate for the current scale but not a streaming/warehouse design.
+- **No PostgreSQL execution.** Tests use SQLite; the `func.date` grouping and aggregate queries should be re-run against PostgreSQL 16 before deployment.
+
+### Remaining risk
+
+- Skill demand is case-sensitive as stored; the extractor already lowercases curated terms, but manual edits can introduce variants. A normalized skill vocabulary is the next refinement.
+- Trends are UTC calendar days; a source in another timezone may appear to shift by one day.
+- Budget statistics are content signals, not verified market prices; they must not be used for financial decisions.
