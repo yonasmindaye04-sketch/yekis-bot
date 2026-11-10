@@ -90,6 +90,13 @@ def collect_job(
     from app.integrations.telegram.client import TelethonClient
     from app.integrations.telegram.collector import collect_sources
 
+    if not settings.telegram_ready:
+        return JobOutcome(
+            status="skipped",
+            attempts=0,
+            value={"reason": "telegram_disabled_or_unconfigured"},
+        )
+
     key = idempotency_key or f"collect:{datetime.now(UTC).strftime('%Y%m%d%H%M')}"
 
     async def _collect() -> list[dict]:

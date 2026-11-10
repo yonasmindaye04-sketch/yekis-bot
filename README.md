@@ -1,13 +1,22 @@
 # Yekis Intelligence
 
-Independent intelligence service for the Yekis marketplace: FastAPI, PostgreSQL, source management, Telegram collection, background processing, rule/LLM extraction, an audit-trailed review queue, and an authenticated admin dashboard.
+Independent intelligence service for the Yekis marketplace: FastAPI, PostgreSQL, source management, Telegram collection, background processing, rule/LLM extraction, an audit-trailed review queue, approval-gated publishing, analytics, and an authenticated admin dashboard.
+
+## Documentation
+
+- [Documentation index](docs/README.md) — start here for the reading order.
+- [Project guide](docs/PROJECT_GUIDE.md) — architecture, data model, workflows, configuration, development, and troubleshooting.
+- [API reference](docs/API_REFERENCE.md) — every route, role, request/response shape, transition, and error code.
+- [Operations runbook](docs/OPERATIONS.md) — local/Docker setup, migrations, collector/publisher runbooks, monitoring, backup, and incident playbooks.
+- [Milestone execution audit](docs/audit/MILESTONE_EXECUTION.md) — what was implemented, the tests that prove it, and live-verification gaps.
 
 ## Architecture
 
 - Python 3.12, FastAPI, SQLAlchemy 2, Alembic, PostgreSQL
-- Redis + Celery for background collection and retries
-- Telethon for authorized-channel collection; publishing is approval-gated (M5)
+- Redis + Celery for background collection, publishing schedules, and retries
+- Telethon for authorized-channel collection; publishing is approval-gated and disabled by default
 - API-key service-to-service authentication with admin/reviewer/collector/analyst roles
+- Review decisions and field edits are append-only audit events
 - The service has no access to marketplace escrow, wallet, payout, or contract operations
 
 ## Quick start
@@ -62,6 +71,8 @@ uvicorn app.main:app --reload --port 8100
 
 For local development outside Docker, set `DATABASE_URL` to your PostgreSQL instance.
 
+The full route list, roles, and error codes are in the [API Reference](docs/API_REFERENCE.md). Setup, migration, and incident procedures are in the [Operations Runbook](docs/OPERATIONS.md).
+
 ## API endpoints
 
 - `GET /health` (public)
@@ -78,6 +89,9 @@ For local development outside Docker, set `DATABASE_URL` to your PostgreSQL inst
 - `PATCH /api/v1/opportunities/{id}/review` (reviewer or admin)
 - `PATCH /api/v1/opportunities/{id}` (reviewer or admin; records an audit event)
 - `GET /api/v1/opportunities/{id}/events` (reviewer/admin/analyst)
+- `POST /api/v1/opportunities/{id}/publish` (reviewer or admin; immediate or scheduled)
+- `GET /api/v1/publications` and `GET /api/v1/publications/{id}` (reviewer/admin/analyst)
+- `GET /api/v1/analytics/overview`, `/sources`, `/market`, `/trends` (analyst/reviewer/admin)
 
 ## Authentication and review audit
 

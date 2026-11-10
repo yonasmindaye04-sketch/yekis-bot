@@ -4,9 +4,10 @@ Credentials are configured as a JSON object in ``AUTH_API_KEYS``:
 
     {"<key>": {"role": "reviewer", "name": "Ops reviewer"}}
 
-The raw key is never stored in process after parsing: only a SHA-256
-fingerprint is kept, and comparisons use ``hmac.compare_digest``. Requests
-present the key in ``X-API-Key`` or ``Authorization: Bearer ...``.
+The credential lookup keeps only a SHA-256 fingerprint; comparisons use
+``hmac.compare_digest``. The configured JSON is held by settings, but raw keys
+are not copied into request state or logs. Requests present the key in
+``X-API-Key`` or ``Authorization: Bearer ...``.
 """
 
 from __future__ import annotations

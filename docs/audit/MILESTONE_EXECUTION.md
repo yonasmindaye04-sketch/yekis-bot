@@ -348,3 +348,31 @@ Environment: Python 3.15.1 (host; declared target remains 3.12), SQLite used onl
 - Skill demand is case-sensitive as stored; the extractor already lowercases curated terms, but manual edits can introduce variants. A normalized skill vocabulary is the next refinement.
 - Trends are UTC calendar days; a source in another timezone may appear to shift by one day.
 - Budget statistics are content signals, not verified market prices; they must not be used for financial decisions.
+
+---
+
+## Final verification after documentation pass
+
+The documentation set was added after the M6 section above. The final code state was re-verified:
+
+| # | Command | Result |
+|---|---|---|
+| 1 | `pytest -q` | **97 passed** |
+| 2 | `ruff check app tests migrations` | all checks passed |
+| 3 | `python -m compileall -q app tests migrations` | exit 0 |
+| 4 | `alembic upgrade head` on a fresh scratch DB | 0001 → 0005 applied |
+| 5 | `alembic check` | `No new upgrade operations detected.` |
+| 6 | `docker compose config -q` | exit 0 |
+| 7 | `pip install -e ".[dev]"` | succeeded (Python 3.15 host) |
+
+Documentation added:
+
+- `docs/README.md` — index and reading order.
+- `docs/PROJECT_GUIDE.md` — architecture, data model, workflows, auth, configuration, development, troubleshooting, limitations.
+- `docs/API_REFERENCE.md` — route contracts, roles, transitions, error codes, examples.
+- `docs/OPERATIONS.md` — setup, migrations, collector/publisher runbooks, monitoring, backup, incident playbooks.
+- `docs/ARCHITECTURE.md` — refreshed decision record linked to the guide.
+- `README.md` — documentation links and current architecture summary.
+- `Dockerfile` — now copies `alembic.ini` and `migrations/` so the documented in-container migration command works.
+
+Final known gaps remain unchanged: no live Telegram/Redis/LLM/PostgreSQL verification in this environment, no live channel send, no application-level rate limiting, no CI workflow, and no stale-lock reaper for `running` jobs.
