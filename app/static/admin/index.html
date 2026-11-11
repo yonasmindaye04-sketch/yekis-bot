@@ -1318,13 +1318,6 @@
               </tbody>
             </table>
           </div>
-                    <td>${t.approvals}</td>
-                    <td>${t.publications}</td>
-                  </tr>
-                `).join("") || '<tr><td colspan="5" class="empty">No trend entries in window</td></tr>'}
-              </tbody>
-            </table>
-          </div>
         `;
       } catch (err) {
         container.innerHTML = `<div class="error">${esc(err.message)}</div>`;
