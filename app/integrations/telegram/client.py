@@ -61,8 +61,10 @@ class TelethonClient:
             await self._client.disconnect()
             self._client = None
             raise TelegramNotConfigured(
-                "Telegram session is not authorized; run an interactive login once "
-                "and keep the session file outside version control"
+                "Telegram session is not authorized. Collection needs a user "
+                "account session: run "
+                "'python -m app.integrations.telegram.login --as user' once, then "
+                "keep the session file outside version control."
             )
         return self._client
 

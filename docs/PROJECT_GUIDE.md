@@ -693,7 +693,8 @@ Keep migrations compatible with both PostgreSQL and the SQLite audit path where 
 These are explicit, not hidden:
 
 - **Live integrations are not yet verified in this environment.** Telegram collection/publishing, Redis/Celery, PostgreSQL, and live Gemini/OpenAI calls were tested with fakes or SQLite. The Gemini adapter is covered by a mock HTTP transport; the audit records each gap.
-- **Telegram account model:** bots cannot read channel history (`GetHistoryRequest` is restricted for bot accounts). Collection requires a user session; a bot token is used only for publishing.
+- **Telegram account model:** bots cannot read channel history (`GetHistoryRequest` is restricted for bot accounts) and cannot enumerate dialogs (`getDialogs` is restricted too). Collection requires a user session; a bot token is used only for publishing.
+- **Collection cost:** extraction runs synchronously per message, so provider latency dominates bulk collection. At the measured NVIDIA latency of ~105 s per extraction, a 100-message backfill takes about three hours.
 - **Static API keys.** No rotation UI or per-key revocation workflow. Rotate by editing `AUTH_API_KEYS` and restarting.
 - **No rate limiting or request-body cap yet.** Keep the service on a trusted network until these land.
 - **No CI workflow committed.** Run the local quality gates before merging; the test suite is fast enough.

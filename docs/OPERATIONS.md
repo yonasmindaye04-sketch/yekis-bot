@@ -305,6 +305,16 @@ python -m app.integrations.telegram.login --as bot
 
 A bot must already be a member/admin of the channel it publishes to. The session files are credentials: git-ignored, never copied into an image or a log.
 
+**Provider latency and bulk collection.** Extraction runs synchronously per message. With NVIDIA NIM at a measured ~105 s per extraction, a 100-message backfill takes roughly three hours, which is longer than the default `COLLECT_INTERVAL_SECONDS` (900). The next scheduled run is then rejected by the job runner instead of duplicating work, so the result stays correct but the cadence is unrealistic. For bulk collection either select a faster model, use the rules extractor for the bulk path and refine at review time, or schedule collection much less frequently.
+
+**Verify the pipeline without a Telegram account:**
+
+```bash
+.venv/Scripts/python.exe scripts/verify_collector_pipeline.py
+```
+
+It checks ingestion, duplicate prevention (both the checkpoint filter and the database constraint), checkpoint recovery, failure handling, and backoff against the live database. Pass `--provider configured` to exercise the provider configured in `.env`.
+
 4. Run a collection:
 
 ```bash
@@ -338,6 +348,7 @@ Look at:
 | `skipped_reason=not_a_telegram_source` | Source type must be `telegram`. |
 | `TelegramNotConfigured` | Set `TELEGRAM_ENABLED`, `TELEGRAM_API_ID`, `TELEGRAM_API_HASH`. |
 | "Bots cannot read channel history" | The session was created with a bot token. | Log in with a user account: `python -m app.integrations.telegram.login --as user`. |
+| "Telegram session is not authorized" | No user session exists at `TELEGRAM_SESSION_PATH`. | Run `python -m app.integrations.telegram.login --as user` once. |
 | Collector output is `[]` | There is no active `telegram` source. | Register one with `source_type=telegram` and a public channel URL. |
 | Session not authorized | Run the login command once; keep the session file safe. |
 | Repeated `last_error` | Check channel access, account status, and network; the checkpoint does not advance on failure. |

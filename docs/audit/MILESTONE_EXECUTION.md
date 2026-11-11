@@ -574,3 +574,17 @@ The NVIDIA NIM integration was verified live and the complete workflow was exerc
 | `scripts/smoke_test.py` (live stack, NVIDIA active) | **54/54 passed** |
 
 Full detail: `NVIDIA_NIM_VERIFICATION.md`.
+
+---
+
+## Telegram collection validation (step 3)
+
+The collector pipeline was validated against the live PostgreSQL database and the Telegram account constraint was confirmed by two live probes.
+
+**Result: 28/28 pipeline checks passed** — ingestion, duplicate prevention (checkpoint filter *and* unique-constraint replay), checkpoint advance and recovery, failure handling (the checkpoint does not advance on failure), backoff, skip, and recovery. Full detail in `TELEGRAM_COLLECTION_VALIDATION.md`.
+
+**Live Telegram constraint (confirmed twice):** bot accounts cannot read channel history (`GetHistoryRequest`) and cannot enumerate dialogs (`getDialogs`). Collection therefore requires a user account session (`python -m app.integrations.telegram.login --as user`); the bot token remains publish-only. The session files were separated (`TELEGRAM_SESSION_PATH=var/telegram_user`, `TELEGRAM_BOT_SESSION_PATH=var/telegram_collector`) because a Telethon session is bound to one account identity.
+
+**New operational constraint:** provider latency dominates bulk collection. At the measured ~105 s per NVIDIA extraction, a 100-message backfill takes about three hours — longer than the default collection interval.
+
+**Changes:** `scripts/verify_collector_pipeline.py` (new), an actionable authorization error naming `--as user`, and `cryptg` added so Telethon uses native AES instead of the slow pure-Python fallback.
