@@ -5,6 +5,7 @@ Independent intelligence service for the Yekis marketplace: FastAPI, PostgreSQL,
 ## Documentation
 
 - [Documentation index](docs/README.md) — start here for the reading order.
+- [Build and design rules](rules.md) — mandatory architecture, security, coding, and build standards.
 - [Project guide](docs/PROJECT_GUIDE.md) — architecture, data model, workflows, configuration, development, and troubleshooting.
 - [API reference](docs/API_REFERENCE.md) — every route, role, request/response shape, transition, and error code.
 - [Operations runbook](docs/OPERATIONS.md) — local/Docker setup, migrations, collector/publisher runbooks, monitoring, backup, and incident playbooks.

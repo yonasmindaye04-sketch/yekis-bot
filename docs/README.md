@@ -5,6 +5,7 @@ Start with the guide that matches your task.
 | I need to... | Read |
 |---|---|
 | Understand the system end to end | [Project Guide](PROJECT_GUIDE.md) |
+| Follow mandatory build, design & security rules | [Build and Design Rules](../rules.md) |
 | Call or integrate with the API | [API Reference](API_REFERENCE.md) |
 | Run, deploy, monitor, or troubleshoot it | [Operations Runbook](OPERATIONS.md) |
 | See what was built and the evidence for it | [Milestone Execution Audit](audit/MILESTONE_EXECUTION.md) |
