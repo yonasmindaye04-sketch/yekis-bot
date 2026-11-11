@@ -367,6 +367,23 @@ No marketplace financial table or API is touched.
 
 ---
 
+## 6.7 Admin dashboard design standards
+
+The dashboard (`app/static/admin/index.html`) is a single dependency-free page served at `/admin/`. It follows the mandatory visual standards in `rules.md` (sections 2, 3, and 4) and those rules are enforced by `tests/test_ui_compliance.py`.
+
+| Standard | Implementation |
+|---|---|
+| Zero emoji | No emoji anywhere in the repository; enforced by a repository-wide scan test. |
+| Indicators | Status is shown as **bold colored text only** (`.badge`, `.indicator`): green for approved/active/published/healthy, red for rejected/inactive/failed, amber for needs_review/sending/risk, blue for pending_review/scheduled/roles. No background pills, no borders, no dot pseudo-elements. |
+| Theming | Dark and light themes driven by CSS custom properties (`--bg`, `--panel`, `--line`, `--text`, `--text-muted`, plus semantic tokens). Theme blocks only redefine color values; all geometry stays in the shared base rules. |
+| Color discipline | No hardcoded hex or rgba in component styles; every color resolves to a theme token. |
+| Single toggle | One theme toggle, in the primary header, persisted to `localStorage` and initialized from `prefers-color-scheme`. |
+| Date filters | Date-range inputs are grouped in a flex row with a fixed 150px width each. |
+| Responsive | Breakpoints at 640/1024px. KPI cards render two per row on phones, action buttons share one row, the viewport hides horizontal overflow, flex children can shrink (`min-width: 0`), and touch targets are at least 44x44px. |
+| Session safety | The client enforces a 30-minute inactivity timeout that clears the stored key, and an HTTP 401 clears authentication state immediately. |
+
+Every feature is reachable from the top navigation (Review queue, Ingest Post, Sources, Publications, Analytics).
+
 ## 7. Authentication and roles
 
 Every `/api/v1/*` route requires a key, except the public `/`, `/health`, and static `/admin/` page.

@@ -32,6 +32,8 @@ Independent intelligence service for the Yekis marketplace: FastAPI, PostgreSQL,
 
 All `/api/v1/*` routes require `X-API-Key: <key>` (or `Authorization: Bearer <key>`). In development, `http://localhost:8100/docs` remains available; outside development the docs and OpenAPI routes are disabled. The service refuses to start outside development when `AUTH_API_KEYS` is empty.
 
+The admin dashboard at `/admin/` follows the visual standards in [`rules.md`](rules.md): zero emoji, status shown as bold colored text (no pills or badges with backgrounds), full dark/light theming driven by CSS tokens with a single header toggle, 44px touch targets, no horizontal overflow, and a 30-minute inactivity timeout that clears the stored key. These standards are enforced automatically by `tests/test_ui_compliance.py`.
+
 For local development, `AUTO_CREATE_SCHEMA=true` creates tables on startup. For controlled environments, set it to `false` and run `alembic upgrade head` before starting the API.
 
 ## Example source

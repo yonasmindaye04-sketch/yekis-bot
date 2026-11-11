@@ -479,3 +479,38 @@ Telegram forbids bots from reading channel history. The collector previously reu
 | `ruff check app tests migrations scripts` | all checks passed |
 | `scripts/smoke_test.py` | **54/54 passed** |
 | `alembic check` (PostgreSQL) | no drift |
+
+---
+
+## rules.md UI/UX compliance pass
+
+The mandatory visual standards in `rules.md` (sections 2, 3, and 4) were applied to the admin dashboard and are now enforced by automated tests.
+
+### Changes applied to `app/static/admin/index.html`
+
+| Rule | Change |
+|---|---|
+| 2.1 Zero emoji | Repository-wide scan reports 0 emoji. The dashboard uses no emoji; text separators were replaced with CSS dividers. |
+| 3.1 Bold colored indicators only | `.pill` renamed to `.indicator`; `.badge` confirmed as bold colored text with no background, border, or radius. Tab counts (`.badge-count`) converted from a background pill to plain bold text. The `.dot` pseudo-element indicator was removed. State colors follow the mandated mapping (green/red/amber/blue). |
+| 3.3 No icon tiles | The brand mark renders as a bare colored glyph with no background or border. |
+| 4.1 Theme parity | Added `--accent-contrast`, `--code-text`, `--code-bg`, `--line-hover`, `--shadow-sm`, and hover tokens to both themes; removed the theme-conditional `.orig-text`/`code` overrides in favour of token swaps. All component colors now resolve to tokens. |
+| 4.1 Single toggle | The header theme toggle was not wired. It now applies, persists (`yekis.theme`), and initializes from `prefers-color-scheme`, and its label reflects the next mode. |
+| 4.2 Date filters | Date inputs use a 150px fixed width in a flex group with wrapping and max-width containment. |
+| 4.3 Responsive | Removed the `!important` overrides, added `min-width: 0` for flex/grid children, a 1024px breakpoint, 44px minimum for small buttons, shared-row action buttons (`.actions`), and a full-width mobile toast. |
+| 6.3 Session handling | Added a 30-minute inactivity timeout that clears the stored key, and immediate authentication-state clearing on any HTTP 401. |
+
+### Enforcement
+
+`tests/test_ui_compliance.py` (20 checks) enforces: repository-wide zero emoji, indicator styling rules, indicator state coverage, no dot pseudo-elements, tab counts without pills, theme token parity for both themes, no hardcoded colors outside token blocks, theme-conditional paint-only rules, a single wired header theme toggle, compact date filters, overflow and shrink containment, two-column mobile KPI cards, 44px touch targets, shared mobile action rows, no inline grid columns, the 30-minute inactivity timeout, and 401 credential clearing.
+
+### Executed evidence
+
+| # | Command | Result |
+|---|---|---|
+| 1 | `pytest -q` | **139 passed** |
+| 2 | `ruff check app tests migrations scripts` | all checks passed |
+| 3 | `python -m compileall -q app tests migrations scripts` | exit 0 |
+| 4 | `docker compose build api` + `docker compose up -d api` | image rebuilt; container serves the updated dashboard byte-for-byte (66,292 bytes) |
+| 5 | Served-HTML compliance re-check | 14/14 UI checks pass against the live response |
+| 6 | `scripts/smoke_test.py` against the rebuilt container | **54/54 passed** |
+| 7 | Markdown link check (22 files) | no missing links |

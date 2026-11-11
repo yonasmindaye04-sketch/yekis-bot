@@ -231,3 +231,31 @@ Yekis Intelligence is an asynchronous content discovery, extraction, risk evalua
 - **Branch Protection**: Never commit directly to `main`. Use structured feature or QA branches (e.g. `qa/system-integration-verification`).
 - **Clean Diffs**: Avoid touching unrelated files or reformating code outside the scope of the task.
 - **Documentation Parity**: Whenever endpoints, models, configuration, or workflows change, update `README.md`, `rules.md`, and documentation under `docs/` in the same commit.
+
+---
+
+## Compliance Status (maintained)
+
+The standards in this document are enforced in CI and by the local quality gates. Keep this section current when behaviour changes.
+
+| Rule area | Enforcement | Status |
+|---|---|---|
+| 2. Zero emoji | `tests/test_ui_compliance.py::test_repository_contains_no_emoji` scans `app/`, `docs/`, `scripts/`, `tests/`, `migrations/`, `README.md`, and `rules.md` for pictographic characters | Enforced, 0 hits |
+| 3.1 Bold colored indicators only | `test_badge_rule_is_bold_text_without_background_or_border`, `test_indicator_classes_cover_every_required_state`, `test_tab_counts_are_plain_text_not_pills`, `test_no_dot_pseudo_element_indicators` | Enforced |
+| 3.2 No decorative badges on headings | Manual review; indicators are rendered in card bodies and table cells, never beside a heading | Enforced |
+| 3.3 No icon background tiles | Bare glyphs only; the brand mark is plain text with no tile | Enforced |
+| 4.1 Theme parity and token use | `test_theme_tokens_are_defined_for_both_themes`, `test_component_styles_use_tokens_not_hardcoded_colors`, `test_theme_conditional_css_only_changes_paint`, `test_single_theme_toggle_in_header`, `test_theme_toggle_is_wired_to_persistence` | Enforced |
+| 4.2 Compact date filters | `test_date_filters_use_compact_fixed_width` | Enforced |
+| 4.3 Responsive and touch | `test_viewport_prevents_horizontal_overflow`, `test_flex_and_grid_children_can_shrink`, `test_mobile_media_query_enforces_two_kpi_columns`, `test_action_buttons_share_a_row_on_mobile`, `test_dashboard_has_no_inline_grid_template_columns` | Enforced |
+| 6.3 Session handling | `test_inactivity_timeout_is_thirty_minutes`, `test_401_response_clears_authentication_state` | Enforced |
+| 8.2 Quality gates | `ruff check app tests migrations scripts` and `python -m compileall -q app tests migrations scripts` | Enforced |
+| 8.3 Automated tests | `pytest` (full suite green, SQLite in-memory, no live external calls) | Enforced |
+| 8.4 Documentation parity | `README.md`, `rules.md`, and `docs/` updated in the same commit as behaviour changes | Process rule |
+
+The dashboard is served from the container image. After changing
+`app/static/admin/index.html`, rebuild and restart the API so the change is
+visible:
+
+```sh
+docker compose up --build -d api
+```

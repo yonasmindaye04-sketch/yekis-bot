@@ -34,6 +34,14 @@
       --blue-soft: rgba(96, 165, 250, 0.12);
       --blue-border: rgba(96, 165, 250, 0.35);
       --purple: #c084fc;
+      --accent-contrast: #0b151a;
+      --code-text: #cbd5e1;
+      --code-bg: rgba(0, 0, 0, 0.25);
+      --line-hover: #3b4e66;
+      --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.15);
+      --danger-hover: rgba(248, 113, 113, 0.22);
+      --ok-hover: rgba(52, 211, 153, 0.22);
+      --warn-hover: rgba(251, 191, 36, 0.22);
       --radius-sm: 6px;
       --radius: 10px;
       --radius-lg: 14px;
@@ -69,15 +77,15 @@
       --blue-soft: rgba(37, 99, 235, 0.10);
       --blue-border: rgba(37, 99, 235, 0.30);
       --purple: #7c3aed;
+      --accent-contrast: #ffffff;
+      --code-text: #1e293b;
+      --code-bg: #f1f5f9;
+      --line-hover: #94a3b8;
+      --shadow-sm: 0 2px 8px rgba(15, 23, 42, 0.08);
+      --danger-hover: rgba(220, 38, 62, 0.16);
+      --ok-hover: rgba(5, 150, 105, 0.16);
+      --warn-hover: rgba(180, 83, 9, 0.16);
       --shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-    }
-    :root[data-theme="light"] .orig-text {
-      color: #1e293b;
-      background: #f1f5f9;
-    }
-    :root[data-theme="light"] code {
-      background: #e2e8f0;
-      color: #0f172a;
     }
     * { box-sizing: border-box; }
     html, body {
@@ -124,7 +132,9 @@
       border: none;
     }
     .spacer { flex: 1; }
-    .pill {
+    /* Status indicators: bold colored text only. No background, no border,
+       no pill shape, no dot pseudo-element (rules.md 3.1). */
+    .indicator {
       font-size: 12px;
       color: var(--text-muted);
       display: inline-flex;
@@ -133,11 +143,13 @@
       background: transparent;
       border: none;
       padding: 0;
-      font-weight: 600;
+      font-weight: 700;
     }
-    .pill.ok { color: var(--ok); }
-    .pill.bad { color: var(--danger); }
-    .pill.role { color: var(--blue); }
+    .indicator.ok { color: var(--ok); }
+    .indicator.bad { color: var(--danger); }
+    .indicator.warn { color: var(--warn); }
+    .indicator.info { color: var(--blue); }
+    .indicator.role { color: var(--blue); }
 
     main {
       flex: 1;
@@ -156,7 +168,7 @@
       border-radius: var(--radius);
       padding: 20px;
       margin-bottom: 20px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+      box-shadow: var(--shadow-sm);
     }
     .card-header {
       display: flex;
@@ -170,6 +182,8 @@
     .card-title { font-size: 16px; font-weight: 600; margin: 0 0 12px; display: flex; align-items: center; gap: 8px; }
 
     .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+    .row > *, .grid > *, .item, .card, .kpi-card, .sub-panel { min-width: 0; }
+    .actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
     .grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
     .grid-2 { display: grid; gap: 16px; grid-template-columns: 1fr 1fr; }
     @media (max-width: 840px) { .grid-2 { grid-template-columns: 1fr; } }
@@ -214,7 +228,7 @@
     }
     button.primary {
       background: var(--accent);
-      color: #0b151a;
+      color: var(--accent-contrast);
       border-color: var(--accent);
       font-weight: 600;
     }
@@ -228,7 +242,7 @@
       border-color: var(--danger-border);
     }
     button.danger:hover {
-      background: rgba(248, 113, 113, 0.22);
+      background: var(--danger-hover);
     }
     button.ok {
       color: var(--ok);
@@ -236,12 +250,15 @@
       border-color: var(--ok-border);
     }
     button.ok:hover {
-      background: rgba(52, 211, 153, 0.22);
+      background: var(--ok-hover);
     }
     button.warn {
       color: var(--warn);
       background: var(--warn-soft);
       border-color: var(--warn-border);
+    }
+    button.warn:hover {
+      background: var(--warn-hover);
     }
     button.small { padding: 5px 10px; font-size: 12px; }
 
@@ -269,18 +286,21 @@
     }
     .tabs button.active {
       color: var(--accent);
-      background: var(--accent-soft);
-      border-color: var(--accent-border);
-      font-weight: 600;
+      background: transparent;
+      border-color: transparent;
+      border-bottom-color: var(--accent);
+      font-weight: 700;
     }
     .tabs button .badge-count {
-      background: var(--panel-3);
-      color: var(--text);
-      padding: 1px 6px;
-      border-radius: 999px;
+      color: var(--text-muted);
+      background: transparent;
+      border: none;
+      padding: 0;
       font-size: 11px;
+      font-weight: 700;
       margin-left: 6px;
     }
+    .tabs button.active .badge-count { color: var(--accent); }
 
     .badge {
       display: inline-block;
@@ -305,10 +325,18 @@
       color: var(--warn);
     }
     .badge.skill {
-      color: #93c5fd;
+      color: var(--blue);
       text-transform: none;
       font-weight: 600;
       font-size: 12px;
+    }
+    .skill-cloud { display: flex; flex-wrap: wrap; gap: 8px; }
+    .skill-cloud .badge { font-size: 13px; }
+    .meta-sep {
+      width: 1px;
+      align-self: stretch;
+      min-height: 12px;
+      background: var(--line);
     }
 
     .item {
@@ -319,7 +347,7 @@
       margin-bottom: 16px;
       transition: border-color 0.15s;
     }
-    .item:hover { border-color: #3b4e66; }
+    .item:hover { border-color: var(--line-hover); }
     .item.flagged { border-left: 4px solid var(--warn); }
     .item h3 { margin: 0 0 6px; font-size: 16px; font-weight: 600; }
     .item-meta { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; font-size: 12px; color: var(--text-muted); }
@@ -353,13 +381,19 @@
       word-break: break-word;
       font-size: 12px;
       line-height: 1.45;
-      color: #cbd5e1;
+      color: var(--code-text);
       max-height: 160px;
       overflow-y: auto;
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
       padding: 6px;
-      background: rgba(0,0,0,0.25);
+      background: var(--code-bg);
       border-radius: 4px;
+    }
+    code {
+      background: var(--code-bg);
+      color: var(--code-text);
+      border-radius: 4px;
+      padding: 1px 4px;
     }
 
     .kpi-grid {
@@ -467,11 +501,17 @@
       display: flex;
       align-items: center;
       gap: 8px;
+      flex-wrap: wrap;
+      max-width: 100%;
     }
     .date-filter-group input[type="date"] {
-      width: 150px !important;
+      width: 150px;
+      max-width: 100%;
     }
 
+    @media (max-width: 1023px) {
+      .split-box { grid-template-columns: 1fr; }
+    }
     @media (max-width: 640px) {
       main {
         padding: 12px;
@@ -485,12 +525,13 @@
         font-size: 15px;
       }
       .kpi-grid {
-        grid-template-columns: repeat(2, 1fr) !important;
+        grid-template-columns: repeat(2, 1fr);
         gap: 8px;
       }
       .kpi-card {
         padding: 10px 12px;
       }
+      .kpi-label { font-size: 10px; }
       .kpi-value {
         font-size: 20px;
       }
@@ -514,10 +555,10 @@
         min-height: 44px;
       }
       input, select, textarea {
-        font-size: 16px !important;
+        font-size: 16px;
       }
       button.small {
-        min-height: 40px;
+        min-height: 44px;
         padding: 6px 10px;
       }
       .row {
@@ -525,6 +566,14 @@
       }
       .card {
         padding: 14px;
+      }
+      /* Action buttons share one row instead of stacking into tall blocks. */
+      .actions { gap: 8px; }
+      .actions button { flex: 1 1 auto; }
+      .toast {
+        left: 12px;
+        right: 12px;
+        bottom: 12px;
       }
     }
   </style>
@@ -535,10 +584,10 @@
       <span class="brand-icon">Y</span>
       <span>Yekis Intelligence</span>
     </div>
-    <span class="pill" id="connection">not connected</span>
-    <span class="pill role hidden" id="userRole"></span>
+    <span class="indicator" id="connection">not connected</span>
+    <span class="indicator role hidden" id="userRole"></span>
     <div class="spacer"></div>
-    <button class="small" id="themeToggleBtn" title="Switch Theme">Light Mode</button>
+    <button class="small" id="themeToggleBtn" title="Switch theme" aria-label="Switch theme">Light Mode</button>
     <button class="small" id="logoutBtn">Forget key</button>
   </header>
 
@@ -760,8 +809,62 @@
       pendingCount: 0
     };
 
+    const THEME_KEY = "yekis.theme";
+    const INACTIVITY_LIMIT_MS = 30 * 60 * 1000;
+    let inactivityTimer = null;
+
     const $ = (id) => document.getElementById(id);
     const esc = (val) => String(val ?? "").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+    // --- Theme (single toggle in the primary header) --------------------
+    function applyTheme(theme) {
+      document.documentElement.setAttribute("data-theme", theme);
+      const button = $("themeToggleBtn");
+      if (button) {
+        const nextLabel = theme === "dark" ? "Light Mode" : "Dark Mode";
+        button.textContent = nextLabel;
+        button.setAttribute("aria-label", "Switch to " + nextLabel.toLowerCase());
+      }
+    }
+    function initTheme() {
+      const stored = localStorage.getItem(THEME_KEY);
+      const preferred = window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches
+        ? "light"
+        : "dark";
+      applyTheme(stored || preferred);
+    }
+    function toggleTheme() {
+      const current = document.documentElement.getAttribute("data-theme") || "dark";
+      const next = current === "dark" ? "light" : "dark";
+      localStorage.setItem(THEME_KEY, next);
+      applyTheme(next);
+    }
+
+    // --- Session inactivity (30 minutes) --------------------------------
+    function clearAuthState(message) {
+      localStorage.removeItem("yekis.apiKey");
+      state.key = "";
+      state.principal = null;
+      stopInactivityTimer();
+      showAuth();
+      if (message) toast(message, true);
+    }
+    function resetInactivityTimer() {
+      if (!state.key) return;
+      stopInactivityTimer();
+      inactivityTimer = setTimeout(() => {
+        clearAuthState("Session ended after 30 minutes of inactivity. Reconnect to continue.");
+      }, INACTIVITY_LIMIT_MS);
+    }
+    function stopInactivityTimer() {
+      if (inactivityTimer) {
+        clearTimeout(inactivityTimer);
+        inactivityTimer = null;
+      }
+    }
+    function trackActivity() {
+      if (state.key) resetInactivityTimer();
+    }
 
     function toast(message, isError = false) {
       const el = $("toast");
@@ -773,8 +876,8 @@
 
     function setConnection(label, ok, role = null) {
       const conn = $("connection");
-      conn.innerHTML = `<span class="dot"></span> ${label}`;
-      conn.className = "pill " + (ok ? "ok" : "bad");
+      conn.textContent = label;
+      conn.className = "indicator " + (ok ? "ok" : "bad");
 
       const roleBadge = $("userRole");
       if (role) {
@@ -802,6 +905,10 @@
         const err = new Error(msg || `HTTP ${response.status}`);
         err.status = response.status;
         err.detail = detail;
+        if (response.status === 401) {
+          // Immediate credential clearance on authentication failure.
+          clearAuthState("Authentication expired. Enter your API key to continue.");
+        }
         throw err;
       }
       return body;
@@ -842,15 +949,15 @@
 
         <div class="item-meta">
           <span><strong>Type:</strong> ${esc(item.opportunity_type)}</span>
-          <span>•</span>
+          <span class="meta-sep"></span>
           <span><strong>Category:</strong> ${esc(item.category || "uncategorized")}</span>
-          <span>•</span>
+          <span class="meta-sep"></span>
           <span><strong>Compensation:</strong> ${esc(money(item))}</span>
-          <span>•</span>
+          <span class="meta-sep"></span>
           <span><strong>Quality:</strong> ${item.quality_score}/100</span>
-          <span>•</span>
+          <span class="meta-sep"></span>
           <span><strong>Risk:</strong> ${item.risk_score}</span>
-          ${item.remote ? `<span>•</span> <span class="badge ok">Remote</span>` : ""}
+          ${item.remote ? `<span class="meta-sep"></span> <span class="badge ok">Remote</span>` : ""}
         </div>
 
         ${isFlagged ? `<div style="margin: 8px 0;">${riskPills}</div>` : ""}
@@ -912,14 +1019,14 @@
 
         <!-- Actions Bar -->
         <div class="row" style="margin-top: 14px; justify-content: space-between;">
-          <div class="row" style="gap: 8px;">
+          <div class="actions">
             <button class="ok small" data-action="review" data-id="${id}" data-decision="approved">Approve</button>
             <button class="warn small" data-action="review" data-id="${id}" data-decision="needs_review">Needs Review</button>
             <button class="danger small" data-action="review" data-id="${id}" data-decision="rejected">Reject</button>
             <button class="small" data-action="save" data-id="${id}">Save Edits</button>
             ${item.review_status === "approved" ? `<button class="primary small" data-action="publish" data-id="${id}">Publish</button>` : ""}
           </div>
-          <div class="row">
+          <div class="actions">
             <button class="small" data-action="toggle-history" data-id="${id}">History</button>
             <span class="item-meta" id="msg-${id}"></span>
           </div>
@@ -1156,21 +1263,21 @@
             </div>
             <div class="item-meta">
               <span><strong>URL:</strong> <a href="${esc(s.source_url)}" target="_blank" rel="noopener" style="color:var(--blue);">${esc(s.source_url)}</a></span>
-              <span>•</span>
+              <span class="meta-sep"></span>
               <span><strong>Category:</strong> ${esc(s.category || "none")}</span>
-              <span>•</span>
+              <span class="meta-sep"></span>
               <span><strong>Last Checkpoint:</strong> ${s.last_collected_message_id || "None"}</span>
             </div>
             <div class="item-meta" style="margin-bottom:6px;">
               <span><strong>Success:</strong> ${s.last_success_at ? new Date(s.last_success_at).toLocaleString() : "never"}</span>
-              <span>•</span>
+              <span class="meta-sep"></span>
               <span><strong>Failures:</strong> ${s.consecutive_failures}</span>
-              ${s.next_attempt_at ? `<span>•</span> <span><strong>Next attempt:</strong> ${new Date(s.next_attempt_at).toLocaleTimeString()}</span>` : ""}
+              ${s.next_attempt_at ? `<span class="meta-sep"></span> <span><strong>Next attempt:</strong> ${new Date(s.next_attempt_at).toLocaleTimeString()}</span>` : ""}
             </div>
             ${s.last_error ? `<div class="error" style="margin:6px 0; font-size:12px;">Last error: ${esc(s.last_error)}</div>` : ""}
-            <div class="row" style="margin-top: 10px;">
+            <div class="actions" style="margin-top: 10px;">
               <button class="small ${s.is_active ? "danger" : "ok"}" data-source="${s.id}" data-active="${s.is_active ? "false" : "true"}">
-                ${s.is_active ? "⏸️ Deactivate Source" : "▶️ Activate Source"}
+                ${s.is_active ? "Deactivate Source" : "Activate Source"}
               </button>
             </div>
           </div>
@@ -1236,41 +1343,57 @@
       const list = $("publicationList");
       list.innerHTML = '<div class="loading">Loading publication history…</div>';
       try {
-        const items = await api("/api/v1/publications?limit=100");
+        let items = await api("/api/v1/publications?limit=100");
+        const dateFrom = $("pubDateFrom") ? $("pubDateFrom").value : "";
+        const dateTo = $("pubDateTo") ? $("pubDateTo").value : "";
+        if (dateFrom) {
+          items = items.filter((p) => {
+            const d = p.published_at || p.scheduled_at || p.created_at;
+            return d && d.slice(0, 10) >= dateFrom;
+          });
+        }
+        if (dateTo) {
+          items = items.filter((p) => {
+            const d = p.published_at || p.scheduled_at || p.created_at;
+            return d && d.slice(0, 10) <= dateTo;
+          });
+        }
         if (!items.length) {
-          list.innerHTML = '<div class="empty">No publication broadcasts recorded yet. Approve an opportunity to publish.</div>';
+          list.innerHTML = '<div class="empty">No publication broadcasts recorded in selected range. Approve an opportunity to publish.</div>';
           return;
         }
         list.innerHTML = `
-          <table>
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Opportunity</th>
-                <th>Destination</th>
-                <th>Status</th>
-                <th>Attempts</th>
-                <th>Message ID</th>
-                <th>Schedule / Published</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${items.map((p) => `
+          <div class="table-container">
+            <table>
+              <thead>
                 <tr>
-                  <td>#${p.id}</td>
-                  <td><a href="#opp-${p.opportunity_id}" style="color:var(--accent);">#${p.opportunity_id}</a></td>
-                  <td><code>${esc(p.channel)}</code></td>
-                  <td>${badge(p.status, p.status)}</td>
-                  <td>${p.attempts}</td>
-                  <td><code>${esc(p.external_message_id || "—")}</code></td>
-                  <td style="font-size:12px; color:var(--text-muted);">
-                    ${p.published_at ? "Sent: " + new Date(p.published_at).toLocaleString() : (p.scheduled_at ? "Due: " + new Date(p.scheduled_at).toLocaleString() : "Immediate")}
-                    ${p.last_error ? `<div class="error" style="margin:2px 0 0; padding:4px 6px; font-size:11px;">${esc(p.last_error)}</div>` : ""}
-                  </td>
+                  <th>ID</th>
+                  <th>Opportunity</th>
+                  <th>Destination</th>
+                  <th>Status</th>
+                  <th>Attempts</th>
+                  <th>Message ID</th>
+                  <th>Schedule / Published</th>
                 </tr>
-              `).join("")}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                ${items.map((p) => `
+                  <tr>
+                    <td>#${p.id}</td>
+                    <td><a href="#opp-${p.opportunity_id}" style="color:var(--accent);">#${p.opportunity_id}</a></td>
+                    <td><code>${esc(p.channel)}</code></td>
+                    <td>${badge(p.status, p.status)}</td>
+                    <td>${p.attempts}</td>
+                    <td><code>${esc(p.external_message_id || "—")}</code></td>
+                    <td style="font-size:12px; color:var(--text-muted);">
+                      ${p.published_at ? "Sent: " + new Date(p.published_at).toLocaleString() : (p.scheduled_at ? "Due: " + new Date(p.scheduled_at).toLocaleString() : "Immediate")}
+                      ${p.last_error ? `<div class="error" style="margin:2px 0 0; padding:4px 6px; font-size:11px;">${esc(p.last_error)}</div>` : ""}
+                    </td>
+                  </tr>
+                `).join("")}
+              </tbody>
+            </table>
+          </div>
         `;
       } catch (err) {
         list.innerHTML = `<div class="error">${esc(err.message)}</div>`;
@@ -1339,8 +1462,8 @@
           <div class="grid-2">
             <div class="card">
               <h3 class="card-title">Top In-Demand Skills</h3>
-              <div style="display:flex; flex-wrap:wrap; gap:8px;">
-                ${((market.skills_demand || []).map((sk) => `<span class="badge skill" style="font-size:13px; padding:4px 10px;">${esc(sk.key)} <strong style="margin-left:4px; color:var(--text);">${sk.count}</strong></span>`).join("")) || '<span style="color:var(--text-dim);">No skills indexed yet.</span>'}
+              <div class="skill-cloud">
+                ${((market.skills_demand || []).map((sk) => `<span class="badge skill">${esc(sk.key)} <strong style="margin-left:4px; color:var(--text);">${sk.count}</strong></span>`).join("")) || '<span style="color:var(--text-dim);">No skills indexed yet.</span>'}
               </div>
 
               <div style="margin-top:20px;">
@@ -1370,64 +1493,68 @@
           <!-- Source Performance Table -->
           <div class="card">
             <h3 class="card-title">Source Performance & Collector Health</h3>
-            <table>
-              <thead>
-                <tr>
-                  <th>Source</th>
-                  <th>Posts</th>
-                  <th>Opportunities</th>
-                  <th>Approval %</th>
-                  <th>Avg Quality</th>
-                  <th>Risk Count</th>
-                  <th>Collector Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${sources.map((s) => `
+            <div class="table-container">
+              <table>
+                <thead>
                   <tr>
-                    <td><strong>${esc(s.name)}</strong> <span style="font-size:11px; color:var(--text-dim);">${esc(s.source_type)}</span></td>
-                    <td>${s.posts}</td>
-                    <td>${s.opportunities}</td>
-                    <td>${s.approval_rate != null ? Math.round(s.approval_rate * 100) + "%" : "—"}</td>
-                    <td>${Math.round(s.avg_quality || 0)}/100</td>
-                    <td>${s.risk_flagged > 0 ? `<span class="badge risk">${s.risk_flagged}</span>` : "0"}</td>
-                    <td>
-                      <span class="badge ${s.consecutive_failures > 0 ? "failed" : "active"}">
-                        ${s.consecutive_failures > 0 ? `${s.consecutive_failures} failures` : "Healthy"}
-                      </span>
-                    </td>
+                    <th>Source</th>
+                    <th>Posts</th>
+                    <th>Opportunities</th>
+                    <th>Approval %</th>
+                    <th>Avg Quality</th>
+                    <th>Risk Count</th>
+                    <th>Collector Status</th>
                   </tr>
-                `).join("") || '<tr><td colspan="7" class="empty">No sources recorded</td></tr>'}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  ${sources.map((s) => `
+                    <tr>
+                      <td><strong>${esc(s.name)}</strong> <span style="font-size:11px; color:var(--text-dim);">${esc(s.source_type)}</span></td>
+                      <td>${s.posts}</td>
+                      <td>${s.opportunities}</td>
+                      <td>${s.approval_rate != null ? Math.round(s.approval_rate * 100) + "%" : "—"}</td>
+                      <td>${Math.round(s.avg_quality || 0)}/100</td>
+                      <td>${s.risk_flagged > 0 ? `<span class="badge risk">${s.risk_flagged}</span>` : "0"}</td>
+                      <td>
+                        <span class="badge ${s.consecutive_failures > 0 ? "failed" : "active"}">
+                          ${s.consecutive_failures > 0 ? `${s.consecutive_failures} failures` : "Healthy"}
+                        </span>
+                      </td>
+                    </tr>
+                  `).join("") || '<tr><td colspan="7" class="empty">No sources recorded</td></tr>'}
+                </tbody>
+              </table>
+            </div>
           </div>
 
           <!-- Activity Trends (30 Days) -->
           <div class="card">
             <h3 class="card-title">30-Day Activity Trends</h3>
             <div style="font-size:12px; color:var(--text-muted); margin-bottom:12px;">Daily aggregated pipeline activity</div>
-            <table>
-              <thead>
-                <tr>
-                  <th>Date (UTC)</th>
-                  <th>Posts Ingested</th>
-                  <th>Opportunities</th>
-                  <th>Approved</th>
-                  <th>Published</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${(Array.isArray(trends) ? trends : (trends.trends || [])).slice(-10).reverse().map((t) => `
+            <div class="table-container">
+              <table>
+                <thead>
                   <tr>
-                    <td><code>${esc(t.day || t.date)}</code></td>
-                    <td>${t.posts}</td>
-                    <td>${t.opportunities}</td>
-                    <td>${t.approvals}</td>
-                    <td>${t.publications}</td>
+                    <th>Date (UTC)</th>
+                    <th>Posts Ingested</th>
+                    <th>Opportunities</th>
+                    <th>Approved</th>
+                    <th>Published</th>
                   </tr>
-                `).join("") || '<tr><td colspan="5" class="empty">No trend entries in window</td></tr>'}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  ${(Array.isArray(trends) ? trends : (trends.trends || [])).slice(-10).reverse().map((t) => `
+                    <tr>
+                      <td><code>${esc(t.day || t.date)}</code></td>
+                      <td>${t.posts}</td>
+                      <td>${t.opportunities}</td>
+                      <td>${t.approvals}</td>
+                      <td>${t.publications}</td>
+                    </tr>
+                  `).join("") || '<tr><td colspan="5" class="empty">No trend entries in window</td></tr>'}
+                </tbody>
+              </table>
+            </div>
           </div>
         `;
       } catch (err) {
@@ -1446,6 +1573,7 @@
       $("authPanel").classList.add("hidden");
       $("workspace").classList.remove("hidden");
       setConnection("connected", true, state.principal ? state.principal.role : "service");
+      resetInactivityTimer();
       loadReview();
       loadSourcesForIngest();
       generateId();
@@ -1508,12 +1636,18 @@
     // Event Listeners
     $("connectBtn").addEventListener("click", connect);
     $("apiKey").addEventListener("keydown", (e) => { if (e.key === "Enter") connect(); });
+    $("themeToggleBtn").addEventListener("click", toggleTheme);
     $("logoutBtn").addEventListener("click", () => {
-      localStorage.removeItem("yekis.apiKey");
-      state.key = "";
-      state.principal = null;
-      showAuth();
+      clearAuthState();
       toast("Disconnected");
+    });
+
+    // Inactivity tracking: any interaction extends the 30-minute session.
+    ["mousedown", "keydown", "wheel", "touchstart", "scroll"].forEach((evt) => {
+      window.addEventListener(evt, trackActivity, { passive: true });
+    });
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) trackActivity();
     });
 
     // Preset keys click
@@ -1573,6 +1707,7 @@
     });
 
     bindTabs();
+    initTheme();
 
     if (state.key) {
       $("apiKey").value = state.key;
