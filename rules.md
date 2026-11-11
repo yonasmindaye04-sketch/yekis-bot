@@ -166,7 +166,7 @@ Yekis Intelligence is an asynchronous content discovery, extraction, risk evalua
 
 ### 7.2 Extraction & LLM Provider Safety
 - **Provider Protocol**: Extraction is abstracted behind the `ExtractionProvider` protocol (`extract(text: str) -> ExtractedOpportunity`).
-- **Supported Providers**: `rules` (deterministic regex), `gemini` (Google AI Studio Generative Language API), and `llm` (OpenAI-compatible `/chat/completions`).
+- **Supported Providers**: `rules` (deterministic regex), `gemini` (Google AI Studio Generative Language API), and `llm` (OpenAI-compatible `/chat/completions`, including NVIDIA NIM at `https://integrate.api.nvidia.com/v1`). Provider failures are typed (`401/403` credential, `429` rate limit, `5xx`/timeout unavailable) and always degrade to `rules_fallback`.
 - **Prompt Injection Defense**: Untrusted post text must be enclosed within `<untrusted_content>` XML tags with explicit system prompts directing models to treat input as data, never instructions.
 - **Closed Schema Validation**: LLM outputs must be parsed into Pydantic models with `model_config = ConfigDict(extra="forbid")`. Unrecognized fields or malformed numbers are rejected.
 - **Deterministic Risk Heuristics**:

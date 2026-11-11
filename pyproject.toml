@@ -30,6 +30,8 @@ include = ["app*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"
+# Makes `scripts/` importable from tests for both `pytest` and `python -m pytest`.
+pythonpath = ["."]
 
 [tool.ruff]
 line-length = 100

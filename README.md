@@ -144,6 +144,36 @@ GEMINI_BASE_URL=https://generativelanguage.googleapis.com/v1beta
 
 The native Gemini `generateContent` API is used, with the key in the `x-goog-api-key` header (never in a URL). `GEMINI_MODEL` is configurable so you can use whichever model is enabled for your AI Studio project.
 
+### NVIDIA NIM (hosted inference)
+
+NVIDIA NIM speaks the OpenAI chat-completions protocol, so it uses the existing `llm` provider — no separate code path:
+
+```env
+EXTRACTION_PROVIDER=llm
+LLM_API_KEY=your_nvidia_api_key
+LLM_BASE_URL=https://integrate.api.nvidia.com/v1
+LLM_MODEL=meta/llama-3.3-70b-instruct   # exact model id from build.nvidia.com
+```
+
+Keep the key in `.env` only; never paste it into chat or commit it.
+
+Two compatibility switches exist for NIM deployments whose model does not accept JSON mode or that need guided decoding:
+
+```env
+LLM_RESPONSE_FORMAT=json_object   # use "none" to omit the parameter
+LLM_EXTRA_BODY={"guided_json":{"type":"object"}}   # optional provider-specific fields
+```
+
+Provider failures are typed and secret-free: `401/403` (auth), `429` (rate limit, includes `retry-after`), `5xx` and timeouts (unavailable). All of them fall back to rules extraction.
+
+Live verification (requires a locally configured NVIDIA key):
+
+```bash
+.venv/Scripts/python.exe scripts/verify_nvidia_live.py
+```
+
+The report prints the model ID, UTC date, HTTP status, latency, and a field-by-field comparison against deterministic extraction. See [`docs/audit/NVIDIA_NIM_VERIFICATION.md`](docs/audit/NVIDIA_NIM_VERIFICATION.md).
+
 ### OpenAI-compatible provider
 
 ```env

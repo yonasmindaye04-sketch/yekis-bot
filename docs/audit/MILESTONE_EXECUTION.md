@@ -514,3 +514,31 @@ The mandatory visual standards in `rules.md` (sections 2, 3, and 4) were applied
 | 5 | Served-HTML compliance re-check | 14/14 UI checks pass against the live response |
 | 6 | `scripts/smoke_test.py` against the rebuilt container | **54/54 passed** |
 | 7 | Markdown link check (22 files) | no missing links |
+
+---
+
+## NVIDIA NIM provider integration
+
+NVIDIA NIM was integrated through the **existing** OpenAI-compatible provider architecture. No provider class was added, the orchestrator contract is unchanged, and the Gemini and rules providers are untouched.
+
+**Changes**
+
+- `app/config.py`: `LLM_RESPONSE_FORMAT` (JSON mode toggle) and `LLM_EXTRA_BODY` (provider-specific request fields, e.g. NVIDIA guided decoding).
+- `app/services/llm/openai_compatible.py`: optional `response_format`/`extra_body`; HTTP failures mapped to typed, secret-free errors (`ProviderAuthError` 401/403, `ProviderRateLimitError` 429 with `retry-after`, `ProviderUnavailableError` 5xx/timeout). All remain `ProviderError` subclasses so the rules fallback is preserved.
+- `app/services/llm/orchestrator.py`: passes the new settings; `parse_extra_body()` fails loudly on malformed JSON.
+- `app/services/extractor.py`: **defect fix** — the budget parser only recognised currency-before-amount (`$300`). Amount-before-currency (`2500 USD`, `45,000 ETB`) is now extracted too, so the deterministic baseline can be compared fairly against provider output.
+- `tests/test_nvidia_provider.py`: 35 checks covering all ten required scenarios.
+- `scripts/verify_nvidia_live.py`: live verification harness (model id, UTC date, HTTP status, latency, provider-vs-rules comparison). Refuses to run without a key and refuses to print a key.
+- `pyproject.toml`: `pythonpath = ["."]` so `scripts/` is importable from tests under bare `pytest`.
+
+**Verification**
+
+| # | Command | Result |
+|---|---|---|
+| 1 | `pytest -q` | **174 passed** |
+| 2 | `python -m pytest -q` | **174 passed** |
+| 3 | `ruff check app tests migrations scripts` | all checks passed |
+| 4 | `python -m compileall -q app tests migrations scripts` | exit 0 |
+| 5 | Live NVIDIA request | **NOT RUN** — no NVIDIA key is configured locally and outbound LLM calls are blocked in this environment |
+
+Full detail, the deterministic baseline, and the live-run procedure are in `NVIDIA_NIM_VERIFICATION.md`.

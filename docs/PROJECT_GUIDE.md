@@ -312,7 +312,7 @@ Provider options:
 
 - `EXTRACTION_PROVIDER=rules` — deterministic, no credentials, always available.
 - `EXTRACTION_PROVIDER=gemini` — native Google Generative Language API using an AI Studio key (`GEMINI_API_KEY`). The key is sent in the `x-goog-api-key` header and is never placed in a URL or log.
-- `EXTRACTION_PROVIDER=llm` — any OpenAI-compatible chat-completions endpoint (`LLM_API_KEY`, `LLM_BASE_URL`, `LLM_MODEL`).
+- `EXTRACTION_PROVIDER=llm` — any OpenAI-compatible chat-completions endpoint (`LLM_API_KEY`, `LLM_BASE_URL`, `LLM_MODEL`). This is the path for **NVIDIA NIM** (`https://integrate.api.nvidia.com/v1`), which needs no separate provider class.
 
 `extraction_method` is stored on the opportunity as `rules`, `gemini`, `llm`, or `rules_fallback`. The original text is always preserved on `collected_posts`; LLM output never replaces it.
 
@@ -480,9 +480,11 @@ Startup behavior:
 | `GEMINI_API_KEY` | unset | Required when `EXTRACTION_PROVIDER=gemini`; from Google AI Studio. |
 | `GEMINI_MODEL` | `gemini-2.5-flash` | Gemini model enabled for your AI Studio project. |
 | `GEMINI_BASE_URL` | `https://generativelanguage.googleapis.com/v1beta` | Native Gemini API base. |
-| `LLM_API_KEY` | unset | Required when `EXTRACTION_PROVIDER=llm`. |
-| `LLM_BASE_URL` | `https://api.openai.com/v1` | OpenAI-compatible base URL. |
-| `LLM_MODEL` | `gpt-4o-mini` | OpenAI-compatible model name. |
+| `LLM_API_KEY` | unset | Required when `EXTRACTION_PROVIDER=llm`. Holds the NVIDIA API key for NIM. |
+| `LLM_BASE_URL` | `https://api.openai.com/v1` | OpenAI-compatible base URL; use `https://integrate.api.nvidia.com/v1` for NVIDIA NIM. |
+| `LLM_MODEL` | `gpt-4o-mini` | OpenAI-compatible model name; use the exact NVIDIA model id. |
+| `LLM_RESPONSE_FORMAT` | `json_object` | JSON mode. Set `none` for deployments that reject the parameter. |
+| `LLM_EXTRA_BODY` | empty | Optional JSON object of provider-specific request fields, e.g. NVIDIA guided decoding. |
 | `LLM_TIMEOUT_SECONDS` | `30` | Outbound request timeout for both providers. |
 | `LLM_MAX_INPUT_CHARS` | `12000` | Input truncation limit for both providers. |
 | `LLM_MAX_OUTPUT_TOKENS` | `800` | Response token cap for both providers. |

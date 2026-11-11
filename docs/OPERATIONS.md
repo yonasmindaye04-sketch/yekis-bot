@@ -60,6 +60,31 @@ GEMINI_BASE_URL=https://generativelanguage.googleapis.com/v1beta
 - If the model is unavailable, rate-limited, blocked by safety, or returns invalid JSON/schema, extraction falls back to rules and the opportunity stores `extraction_method=rules_fallback`.
 - Use `EXTRACTION_PROVIDER=llm` plus `LLM_API_KEY`/`LLM_BASE_URL`/`LLM_MODEL` only if you are using an OpenAI-compatible endpoint instead.
 
+### NVIDIA NIM extraction (optional)
+
+NVIDIA NIM is reached through the same OpenAI-compatible adapter; no separate provider is required.
+
+```env
+EXTRACTION_PROVIDER=llm
+LLM_API_KEY=<your NVIDIA API key>
+LLM_BASE_URL=https://integrate.api.nvidia.com/v1
+LLM_MODEL=meta/llama-3.3-70b-instruct
+```
+
+- Get the key from NVIDIA Build. Store it only in `.env` or a secret manager; never commit it or paste it into a ticket or chat.
+- `LLM_MODEL` must be the exact model id enabled for that key.
+- If a deployment rejects JSON mode, set `LLM_RESPONSE_FORMAT=none`; the strict Pydantic validation still applies to the returned JSON.
+- For guided decoding, set `LLM_EXTRA_BODY` to a JSON object, for example `{"guided_json":{"type":"object"}}`.
+- HTTP failures are typed: `401/403` credential, `429` rate limit (with `retry-after`), `5xx`/timeout unavailable. All fall back to rules extraction, so a provider outage never loses a post.
+
+Live verification (uses the configured key and makes a real request):
+
+```bash
+.venv/Scripts/python.exe scripts/verify_nvidia_live.py
+```
+
+The command prints the model id, UTC test date, HTTP status, latency, and a field-by-field comparison against deterministic extraction, and it refuses to print anything containing the key. Results to date are recorded in `docs/audit/NVIDIA_NIM_VERIFICATION.md`.
+
 Shared limits: `LLM_TIMEOUT_SECONDS`, `LLM_MAX_INPUT_CHARS`, and `LLM_MAX_OUTPUT_TOKENS` apply to both providers.
 
 Rules:

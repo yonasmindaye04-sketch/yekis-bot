@@ -63,6 +63,12 @@ CURRENCY_PATTERN = re.compile(
     r"(?P<currency>\$|USD|ETB|birr)\s*(?P<amount>\d+(?:,\d{3})*(?:\.\d{1,2})?)",
     re.IGNORECASE,
 )
+# Amount-then-currency order ("2500 USD", "45,000 ETB") is as common as the
+# reverse and must be extracted with the same confidence.
+AMOUNT_CURRENCY_PATTERN = re.compile(
+    r"(?P<amount>\d+(?:,\d{3})*(?:\.\d{1,2})?)\s*(?P<currency>USD|ETB|birr)\b",
+    re.IGNORECASE,
+)
 BUDGET_KEYWORDS = ("budget", "pay", "payment", "salary", "rate", "compensation", "fee", "cost")
 RISK_PATTERNS: dict[str, tuple[str, int]] = {
     "upfront_payment": (
@@ -139,6 +145,8 @@ def _risk_flags(text: str) -> tuple[list[str], int]:
 def _budget(text: str, *, has_upfront_fee: bool) -> tuple[float | None, str | None]:
     """Prefer an amount next to a budget keyword, never a fee/upfront amount."""
     candidates = list(CURRENCY_PATTERN.finditer(text))
+    candidates.extend(AMOUNT_CURRENCY_PATTERN.finditer(text))
+    candidates.sort(key=lambda match: match.start())
     if not candidates:
         return None, None
     if has_upfront_fee:

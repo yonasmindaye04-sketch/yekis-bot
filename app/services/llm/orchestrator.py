@@ -7,8 +7,10 @@ A provider failure falls back to rules rather than blocking ingestion.
 
 from __future__ import annotations
 
+import json
 import logging
 from dataclasses import replace
+from typing import Any
 
 from app.config import Settings
 from app.config import settings as default_settings
@@ -23,6 +25,24 @@ from app.services.llm.openai_compatible import OpenAICompatibleProvider
 from app.services.llm.rules_provider import RulesProvider
 
 logger = logging.getLogger(__name__)
+
+
+def parse_extra_body(raw: str | None) -> dict[str, Any]:
+    """Parse provider-specific request extras (for example NVIDIA guided decoding).
+
+    An empty value means "no extras". A malformed value is a configuration
+    error, not a runtime failure, so it is reported loudly instead of being
+    silently ignored.
+    """
+    if not raw or not raw.strip():
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ProviderConfigurationError("LLM_EXTRA_BODY must be valid JSON") from exc
+    if not isinstance(parsed, dict):
+        raise ProviderConfigurationError("LLM_EXTRA_BODY must be a JSON object")
+    return parsed
 
 
 def get_provider(settings: Settings | None = None) -> ExtractionProvider:
@@ -42,6 +62,8 @@ def get_provider(settings: Settings | None = None) -> ExtractionProvider:
             timeout_seconds=settings.llm_timeout_seconds,
             max_input_chars=settings.llm_max_input_chars,
             max_output_tokens=settings.llm_max_output_tokens,
+            response_format=settings.llm_response_format,
+            extra_body=parse_extra_body(settings.llm_extra_body),
         )
     if provider == "gemini":
         if not settings.gemini_api_key:

@@ -55,6 +55,14 @@ class Settings(BaseSettings):
     llm_timeout_seconds: float = 30.0
     llm_max_input_chars: int = 12000
     llm_max_output_tokens: int = 800
+    # "json_object" asks the provider for JSON mode. Some OpenAI-compatible
+    # endpoints (some NVIDIA NIM model deployments) reject it; set to "none"
+    # to omit the parameter.
+    llm_response_format: str = "json_object"
+    # Optional provider-specific request fields as a JSON object, for example
+    # NVIDIA NIM guided decoding: {"guided_json": {...}}. Merged into the
+    # request body without replacing the standard fields.
+    llm_extra_body: str = ""
 
     # Publishing (M5). Never enabled by default.
     publishing_enabled: bool = False
