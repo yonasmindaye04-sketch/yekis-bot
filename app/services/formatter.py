@@ -26,7 +26,7 @@ def format_publication(opportunity: Opportunity, source: Source) -> str:
     if source is None or not source.name:
         raise FormattingError("a source attribution is required")
 
-    header = f"📌 {opportunity.title}"
+    header = f"{opportunity.title}"
     details: list[str] = []
     if opportunity.opportunity_type:
         details.append(opportunity.opportunity_type.replace("_", " ").title())

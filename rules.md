@@ -1,148 +1,220 @@
 # Yekis Intelligence — Build and Design Rules
 
-This document establishes the mandatory design principles, architectural boundaries, coding standards, security constraints, and build/testing rules for the **Yekis Intelligence** service.
+This document establishes the mandatory engineering standards, design principles, architectural boundaries, database discipline, security protocols, and build/testing rules for the **Yekis Intelligence** service.
 
-Every contributor, agent, and reviewer must adhere to these rules without exception.
+These rules incorporate and harmonize standards from across the Yekis ecosystem (including the core Yekis Freelance Marketplace, Afro Suite, and Asella platforms).
+
+Every contributor, agent, and reviewer must strictly adhere to these rules without exception.
 
 ---
 
 ## 1. Architectural Boundaries & System Identity
 
-1. **System Purpose:**  
-   Yekis Intelligence is an asynchronous content discovery, extraction, risk evaluation, human review, and approval-gated publishing service built for the Yekis freelance marketplace.
-2. **Strict Marketplace Core Isolation:**  
-   - Yekis Intelligence has **zero access** to the marketplace financial core.
-   - It possesses **no credentials, no database models, and no API endpoints** capable of creating, releasing, or modifying escrow transactions, wallet balances, payouts, milestone payments, or contracts.
-   - All persistence is restricted to the dedicated `yekis_intelligence` PostgreSQL schema.
-3. **Ground Truth Preservation:**  
-   - Collected messages (`collected_posts.original_text`) are immutable ground truth. Raw content must be preserved verbatim and never altered or silently discarded.
+### 1.1 Service Purpose
+Yekis Intelligence is an asynchronous content discovery, extraction, risk evaluation, human review triage, and approval-gated publishing service for freelance opportunities.
+
+### 1.2 Strict Marketplace Core Isolation
+- **Zero Core Financial Access**: Yekis Intelligence has zero access to the parent marketplace financial core (`yekis`).
+- **No Financial Capabilities**: It possesses no credentials, no database models, and no API endpoints capable of creating, releasing, or modifying escrow transactions, wallet balances, payouts, milestone payments, disputes, or contracts.
+- **Independent Schema & Ports**:
+  - Marketplace Core: Express/TypeScript/Prisma on PostgreSQL port `5433`, BullMQ on Redis port `6379`, MinIO S3 on `9000/9001`.
+  - Yekis Intelligence: FastAPI/Python 3.12/SQLAlchemy on PostgreSQL port `5440` (schema `yekis_intelligence`), Celery on Redis port `6382`, API on port `8100`.
+  - Port isolation must be preserved; never point test or runtime services to marketplace ports.
+- **Integration Boundary**: Yekis Intelligence discovers and verifies public opportunities. Approved opportunities are broadcast to designated channels with attribution links directing freelancers into the Yekis marketplace.
+
+### 1.3 Ground Truth Preservation
+- Raw collected messages (`collected_posts.original_text`) are immutable ground truth.
+- Ingested text, external message IDs, and source URLs must be preserved verbatim. They must never be mutated, overwritten, or silently discarded.
 
 ---
 
-## 2. Design Rules
+## 2. Strict Zero-Emoji & Visual Presentation Policy
 
-### 2.1 Backend Architecture & Technology Stack
-- **Language:** Python 3.12+ (Docker standard: Python 3.12-slim).
-- **Web Framework:** FastAPI with dependency injection for databases and principals.
-- **ORM & Data Layer:** SQLAlchemy 2.0 with modern `Mapped[T]` and `mapped_column()` declarative typing.
-- **Migrations:** Alembic. Migrations must be strictly additive, idempotent, and support forward upgrade and backward downgrade.
-- **Background Pipeline:** Celery 5.4+ with Redis 7 as broker and result backend.
-- **Data Validation:** Pydantic v2 schemas (`BaseModel`) with strict type annotations, validators, and bounds.
+### 2.1 Universal Zero-Emoji Standard
+- **No Emojis Anywhere**: Never use emoji characters anywhere in the user interface, HTML strings, CSS content, JavaScript/TypeScript code, Python files, user-facing UI, notification text, Telegram bot messages, system logs, buttons, dialogs, or documentation.
+- **Visual Indicators**: Use clean typography, SVG glyphs, Lucide icons, FontAwesome icons, or plain text if a visual marker is needed.
+- **Corporate Tone**: All automated alerts, reviewer notices, and broadcast messages must maintain a professional, clean corporate tone without emoji clutter.
 
-### 2.2 Database & Data Modeling Standards
-- **Timestamps:** All timestamp columns must use `DateTime(timezone=True)` with UTC defaults (`datetime.now(UTC)`). Bare, naive timestamps are prohibited.
-- **Indexing:** Explicit indexes are required on high-frequency query fields:
-  - `Opportunity.review_status`
-  - `CollectedPost.content_hash`
-  - `Source.source_type`
-- **Natural Constraints:**
-  - Duplicate posts per source are prevented by `UniqueConstraint("source_id", "external_id", name="uq_source_external_post")`.
-  - Duplicate publications per opportunity and channel are prevented by `UniqueConstraint("opportunity_id", "channel", name="uq_publication_opportunity_channel")`.
-  - One-to-one relationship between `CollectedPost` and `Opportunity` (`collected_post_id` foreign key unique).
-- **Eager vs. Lazy Loading:** Relationships frequently consumed together (e.g. `Opportunity.post`) must use `lazy="joined"` to prevent N+1 query patterns.
+---
 
-### 2.3 Content Extraction & LLM Providers
-- **Provider Protocol:** Extraction is encapsulated behind the `ExtractionProvider` protocol (`extract(text: str) -> ExtractedOpportunity`).
-- **Supported Providers:**
-  1. `rules` (default): Fast, deterministic regex extraction with noun/verb disambiguation and token-boundary matching.
-  2. `gemini`: Native Google AI Studio Generative Language API adapter (`models/{GEMINI_MODEL}:generateContent`).
-  3. `llm`: OpenAI-compatible `/chat/completions` API adapter.
-- **Untrusted Content Encapsulation:** Post content sent to LLM providers must be enclosed in explicit `<untrusted_content>` XML tags with system prompts instructing the model to treat input as data, never instructions.
-- **Closed Schema Validation:** Model outputs are strictly parsed into `LLMOpportunity` with `model_config = ConfigDict(extra="forbid")`. Unrecognized fields, mismatched currency/amounts, or out-of-bounds numbers are rejected.
-- **Deterministic Risk & Safety Merge:**
-  - Deterministic risk heuristics always run in parallel.
-  - Risk flags from deterministic analysis are merged into the LLM output.
+## 3. Badges, Indicators & Visual Styling Standards
+
+### 3.1 Bold Colored Text Only for Indicators
+- **No Background Pills or Borders**: All indicators, tags, and status badges (e.g. `pending_review`, `needs_review`, `approved`, `rejected`, collector health, role indicators) must use **bold colored text only**.
+- **Prohibited Patterns**:
+  - No low-opacity background tints (e.g. `rgba(x, x, x, 0.12)`).
+  - No background colors or borders on badges.
+  - No dot pseudo-elements (`::before` / `.dot`).
+  - No pill-shaped containers with rounded colored borders.
+- **Correct Pattern**:
+  - Bold green text for `approved`, `active`, `published`, `healthy`.
+  - Bold red text for `rejected`, `inactive`, `failed`.
+  - Bold amber/warn text for `needs_review`, `sending`, `risk`.
+  - Bold blue text for `pending_review`, `scheduled`, roles.
+
+### 3.2 No Decorative Tag Badges on Section Headings
+- Do not place `<Badge>` components or tag-style pills beside section or page headings.
+- *Wrong*: `<h2>Review Queue <Badge>Live</Badge></h2>`
+- *Right*: `<h2>Review Queue</h2>` with a descriptive `<p>` below it.
+
+### 3.3 No Icon Background Tiles
+- Icons render as **bare colored glyphs** — no rounded background squares, no tinted tiles, and no shadows behind icons. Surfaces remain clean with bare glyphs.
+
+---
+
+## 4. UI/UX, Theming & Responsiveness Standards
+
+### 4.1 Theme Parity & Dark/Light Mode
+- **Full Theme Support**: Both dark mode (`color-scheme: dark` or `[data-theme="dark"]`) and light mode must be supported via CSS custom properties (`var(--bg)`, `var(--panel)`, `var(--line)`, `var(--text)`, `var(--text-muted)`).
+- **No Hardcoded Hex in Components**: Never hardcode `#ffffff` or dark colors inside inline component styles; always reference CSS theme tokens.
+- **Theme-Conditional CSS Parity Rule**:
+  - Theme-conditional CSS may **only ever alter** `color`, `background`, `border-color`, `box-shadow`, and `opacity`.
+  - Layout and geometry properties (`width`, `height`, `padding`, `margin`, `gap`, `display`, `grid`, `flex`, `font-size`, `font-weight`, `line-height`, `letter-spacing`, `border-radius`, position offsets) must be **strictly theme-invariant** — defined once in un-themed base styles.
+  - Never remove a border in one theme (`border: 0`); recolor it at the same width instead.
+- **Single Theme Toggle**: The theme toggle exists solely in the primary header/sidebar navigation. Never place duplicate toggles in footers or secondary panels.
+
+### 4.2 Form Controls & Date Filters
+- **Compact Date Range Filters**: All date-range filter inputs (`type="date"`) inside toolbars and filter bars must be wrapped in a flex group with explicit width (e.g. `width: 150px` or `w-[150px]`) on each input to prevent them from stretching full-width.
+
+### 4.3 Mobile Compaction & Responsive Fluidity
+- **Fluid Breakpoints**:
+  - Mobile Phones: `320px` – `640px` (`sm`)
+  - Tablets: `641px` – `1023px` (`md` / `lg`)
+  - Laptops & Desktops: `1024px` – `1280px` (`lg` / `xl`)
+  - Ultra-wide Displays: `> 1280px` (`2xl`)
+- **KPI Stat Cards**: Render two per row at `<= 640px` with compact typography and padding — never one giant vertical card per row. Never set inline `gridTemplateColumns` that defeats responsive CSS.
+- **Action Buttons**: Share one row (`flex: 1` or grid) at mobile sizes rather than stacking into giant vertical blocks.
+- **Zero Horizontal Overflow**: Viewport roots must maintain `overflow-x: hidden`, flex containers must set `min-w-0`, and long text strings must wrap or truncate gracefully.
+- **Touch-Friendly Hit Targets**: Interactive elements (buttons, inputs, tabs, triggers) must maintain a minimum target size of `44x44px` on touch viewports.
+- **Modals & Drawers**: Modals must fit mobile viewports (`max-h-[90vh]`, `overflow-y-auto`, compact mobile padding).
+- **Reachability Rule**: Every feature, queue, report, and admin tool must be reachable from UI navigation (tabs/menus/sidebar). Unreachable or orphaned routes are considered broken.
+
+---
+
+## 5. Database, SQL & Migration Discipline
+
+### 5.1 Sequential Codes Are MAX-Based
+- Human-facing sequential identifiers (`OPP-00001`, `PUB-00001`, `SRC-00001`) must always be generated using `MAX(trailing digits) + 1`:
+  - **Never use `COUNT(*) + 1`**: deleting or voiding a record reassigns the same code to the next insert and causes duplicate key collisions.
+  - Seed and test scripts must continue numbering from the existing MAX in the table, never restart at 1.
+  - Prefix parsers must extract numeric digits and support both hyphenated (`OPP-00042`) and non-hyphenated (`OPP00042`) formats.
+
+### 5.2 SQL Column Qualification & Scope Discipline
+- **Qualify Every Column in Joins**: Every column in queries with JOINs must be table-qualified (e.g. `WHERE o.status = :status`, not `WHERE status = :status`) to eliminate ambiguous column crashes when joined tables share column names (`id`, `created_at`, `status`).
+- **Count Subqueries**: Side queries and count summaries must never reference table aliases defined only in the outer query.
+- **Scoped Writes**: Every `UPDATE` and `DELETE` statement must have an explicit scope filter. Unscoped modifications are strictly prohibited.
+- **Historical Value Immutability**: Historical financial values, compensation snapshots, original post texts, and audit diffs must never be modified retrospectively. Rate or currency adjustments apply only prospectively.
+
+### 5.3 Database Modeling Standards
+- **UTC Timestamps**: All timestamp columns must use `DateTime(timezone=True)` with UTC defaults (`datetime.now(UTC)`). Naive timestamps are forbidden.
+- **Declarative ORM**: SQLAlchemy 2.0 declarative mapping with `Mapped[T]` and `mapped_column()`.
+- **Relationships & Lazy Loading**: Frequently co-accessed relationships (e.g. `Opportunity.post`) must use `lazy="joined"` to prevent N+1 query overhead.
+- **Natural Constraints**:
+  - `UniqueConstraint("source_id", "external_id", name="uq_source_external_post")` prevents duplicate posts per source.
+  - `UniqueConstraint("opportunity_id", "channel", name="uq_publication_opportunity_channel")` prevents duplicate channel broadcasts.
+  - One-to-one link between `CollectedPost` and `Opportunity`.
+- **Indexing**: Required on `Opportunity.review_status`, `CollectedPost.content_hash`, and `Source.source_type`.
+
+### 5.4 Migrations & Seeds
+- **Alembic Migrations**:
+  - Migrations must be strictly idempotent (`IF NOT EXISTS`, conditional column/index additions).
+  - Every migration must support both forward upgrade and backward downgrade.
+  - Check constraints and ENUMs must cover all valid values inserted by the application.
+- **Re-runnable Seeds**: Seed scripts must check for existing records and continue numbering from existing MAX values.
+
+---
+
+## 6. Authentication, Authorization & Security
+
+### 6.1 Authentication Mechanism
+- **Header Transport**: API keys are passed via `X-API-Key: <key>` or `Authorization: Bearer <key>`.
+- **Key Cryptography**:
+  - Raw keys are never stored in databases, logs, or request state.
+  - Lookup uses SHA-256 fingerprints with constant-time equality comparisons (`hmac.compare_digest`).
+  - Keys must be at least 16 characters in length.
+- **Fail-Closed Startup**: The service must refuse to start outside development if `AUTH_API_KEYS` is empty.
+- **Documentation Shielding**: Outside development (`APP_ENV != "development"`), `/docs`, `/redoc`, and `/openapi.json` are disabled.
+
+### 6.2 Role-Based Access Control (RBAC) Matrix
+
+| Capability | Admin | Reviewer | Collector | Analyst | Anonymous |
+|---|:---:|:---:|:---:|:---:|:---:|
+| Manage Sources (Create/Patch/Status) | Allowed | Denied | Denied | Denied | Denied |
+| Read Sources | Allowed | Allowed | Allowed | Allowed | Denied |
+| Ingest Content (`/ingestion/manual`) | Allowed | Denied | Allowed | Denied | Denied |
+| Read Opportunities & Posts | Allowed | Allowed | Allowed | Allowed | Denied |
+| Edit Opportunity Fields | Allowed | Allowed | Denied | Denied | Denied |
+| Review (Approve/Reject/Needs Review) | Allowed | Allowed | Denied | Denied | Denied |
+| Publish Opportunities | Allowed | Allowed | Denied | Denied | Denied |
+| Read Analytics & Insights | Allowed | Allowed | Denied | Allowed | Denied |
+| Public Health Check (`/health`) | Allowed | Allowed | Allowed | Allowed | Allowed |
+
+### 6.3 Session & Transport Security
+- **Inactivity Timeout**: Client-side sessions must enforce a 30-minute inactivity timeout that clears authentication state.
+- **401 Response Handling**: Immediate clearance of authentication state on HTTP 401.
+- **Strict CSRF & Origin Verification**: Allowed origins must be matched **exactly** against configured origins — never using `startsWith`, which permits attacker subdomain attacks (e.g. `domain.com.attacker.io`).
+- **Telegram WebApp Cryptography**: Incoming Telegram requests must validate `initData` using HMAC-SHA256 with the bot token secret. Never trust client-supplied user IDs without cryptographic verification.
+- **Secret Redaction**: Zero committed credentials. Secret scanners must verify that `.env`, `*.session`, and `.session-journal` files are never tracked in Git.
+
+---
+
+## 7. Pipeline, Extraction & Publishing Guarantees
+
+### 7.1 Content Ingestion & Deduplication
+- Content deduplication uses SHA-256 content hashes and source external ID constraints.
+- Re-submitting identical content from the same source returns the existing record idempotently without creating duplicates.
+
+### 7.2 Extraction & LLM Provider Safety
+- **Provider Protocol**: Extraction is abstracted behind the `ExtractionProvider` protocol (`extract(text: str) -> ExtractedOpportunity`).
+- **Supported Providers**: `rules` (deterministic regex), `gemini` (Google AI Studio Generative Language API), and `llm` (OpenAI-compatible `/chat/completions`).
+- **Prompt Injection Defense**: Untrusted post text must be enclosed within `<untrusted_content>` XML tags with explicit system prompts directing models to treat input as data, never instructions.
+- **Closed Schema Validation**: LLM outputs must be parsed into Pydantic models with `model_config = ConfigDict(extra="forbid")`. Unrecognized fields or malformed numbers are rejected.
+- **Deterministic Risk Heuristics**:
+  - Deterministic risk analysis runs on every post.
+  - Risk heuristics detect upfront fees, suspicious payment methods, unrealistic compensation, and external contact evasion.
   - If `upfront_payment` is flagged, `budget_amount` and `budget_currency` are suppressed to `None` to prevent fraudulent compensation from being treated as verified.
-  - Provider timeouts, HTTP errors, or malformed JSON must cleanly degrade to `rules_fallback` without losing the ingested post.
-  - **LLM output must NEVER automatically approve or publish content.**
+  - **LLMs must NEVER automatically approve or publish content.**
+  - Provider timeouts, HTTP errors, or schema failures fall back gracefully to `rules_fallback` without losing the ingested post.
 
-### 2.4 Human Review & Append-Only Audit Trail
-- **Allowed States:** `pending_review`, `needs_review`, `approved`, `rejected`.
-- **Enforced Transitions:** Illegal transitions (e.g. directly transitioning from `rejected` without re-review) return HTTP 409 Conflict.
-- **Idempotency:** Repeating the same review decision returns the existing state without creating duplicate audit events.
-- **Append-Only Audit Events:** Every status change and field edit creates a row in `review_events` containing:
+### 7.3 Human Review & Append-Only Audit Trail
+- **Allowed States**: `pending_review`, `needs_review`, `approved`, `rejected`.
+- **Enforced Transitions**: Illegal transitions return HTTP 409 Conflict.
+- **Idempotency**: Submitting an identical decision returns the existing state without creating duplicate audit rows.
+- **Append-Only Audit Trail**: Every status change and field edit creates an immutable record in `review_events` containing:
   - `opportunity_id`
   - `actor` (principal name)
   - `event_type` (`status_change` or `field_edit`)
   - `from_status` and `to_status`
   - `note` (reviewer justification)
-  - `diff` (before-and-after dictionary of altered fields)
+  - `diff` (before-and-after dictionary of modified fields)
   - `created_at` (UTC timestamp)
-- Audit rows are immutable; the API provides no mutation or deletion endpoints for `review_events`.
+- The API provides no mutation or deletion endpoints for `review_events`.
 
-### 2.5 Telegram Publishing
-- **High-Risk Gate:** `PUBLISHING_ENABLED` defaults to `false`. It must fail closed if the channel allowlist `PUBLISHING_ALLOWED_CHANNELS` is empty.
-- **Send-Time Verification:** Approval status and channel allowlists are evaluated when scheduling **and re-checked at send-time**. Rejecting an opportunity cancels any scheduled broadcast.
-- **Mandatory Attribution:** Broadcast messages must include source attribution (`Source: <name>` and source URL). Attribution is appended after message truncation to ensure it cannot be cut off.
-- **At-Most-Once Sending Protection:** The database row status is committed to `sending` before network dispatch. If an unhandled crash occurs mid-send, the row is **not** automatically retried; it transitions to `publication_unknown` for human verification.
-
-### 2.6 Authentication & Authorization (RBAC)
-- **Credential Transport:** Requests must pass the API key in `X-API-Key: <key>` or `Authorization: Bearer <key>`.
-- **Security:**
-  - Raw keys are never stored in databases, logs, or request state.
-  - Key lookup uses SHA-256 fingerprints with constant-time equality comparisons (`hmac.compare_digest`).
-  - Keys must be at least 16 characters in length.
-- **Permission Matrix:**
-
-| Capability | Admin | Reviewer | Collector | Analyst | Anonymous |
-|---|:---:|:---:|:---:|:---:|:---:|
-| Manage Sources (Create/Patch/Status) | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Read Sources | ✅ | ✅ | ✅ | ✅ | ❌ |
-| Ingest Content (`/ingestion/manual`) | ✅ | ❌ | ✅ | ❌ | ❌ |
-| Read Opportunities & Posts | ✅ | ✅ | ✅ | ✅ | ❌ |
-| Edit Opportunity Fields | ✅ | ✅ | ❌ | ❌ | ❌ |
-| Review (Approve/Reject/Needs Review) | ✅ | ✅ | ❌ | ❌ | ❌ |
-| Publish Opportunities | ✅ | ✅ | ❌ | ❌ | ❌ |
-| Read Analytics & Insights | ✅ | ✅ | ❌ | ✅ | ❌ |
-| Public Health (`/health`) | ✅ | ✅ | ✅ | ✅ | ✅ |
-
-- Outside development (`APP_ENV != "development"`), `/docs`, `/redoc`, and `/openapi.json` are disabled.
-- The service must refuse to start outside development if `AUTH_API_KEYS` is empty.
-
-### 2.7 Admin Mission Control UI
-- **Deployment:** Served directly by FastAPI at `/admin/` with no Node.js/npm build step required.
-- **Design System:** Responsive dark mode (`ui-sans-serif`, emerald accent, amber warning, red danger, blue info).
-- **Safety:** All dynamic values (post text, titles, notes, URLs) must be sanitized with HTML entity escaping (`esc()`) before DOM insertion. Inline `eval()` or unescaped HTML interpolation is forbidden.
-- **Features:** Must provide five functional tabs:
-  1. Review Queue (with split verbatim vs extracted view and audit history drawer)
-  2. Ingest Post (manual submission console with test presets)
-  3. Sources Management (health indicators and status toggles)
-  4. Publications (broadcast tracker)
-  5. Analytics & Insights (KPI cards, skills demand, compensation stats, 30-day activity trends)
+### 7.4 Telegram Publishing Protocol
+- **High-Risk Gate**: `PUBLISHING_ENABLED` defaults to `false`. Publishing fails closed if the destination allowlist `PUBLISHING_ALLOWED_CHANNELS` is empty.
+- **Send-Time Verification**: Approval status and channel allowlists are verified when scheduling and **re-verified at send-time**. Rejecting an opportunity cancels any scheduled broadcast.
+- **Mandatory Attribution**: Broadcast messages must retain original source attribution (`Source: <name>` and source URL). Attribution is appended after message sizing so truncation cannot remove it.
+- **At-Most-Once Sending Protection**: The database row status transitions to `sending` before network dispatch. If an unhandled network error or process termination occurs mid-send, the publication is not automatically retried; it transitions to `publication_unknown` for human verification.
 
 ---
 
-## 3. Build & Development Rules
+## 8. Build, Testing & Quality Gates
 
-### 3.1 Dependency Management
-- **Single Source of Truth:** `pyproject.toml` is the sole specification for dependencies.
-- **Runtime Dependencies:** All packages required inside the production Docker image (including transitive driver/transport requirements such as `packaging` for Kombu Redis) must be declared in `project.dependencies`.
-- **Dev Dependencies:** Testing and linting tools (`pytest`, `ruff`) belong under `project.optional-dependencies.dev`.
+### 8.1 Runtime & Dependencies
+- **Runtime**: Python 3.12+ (Docker image: `python:3.12-slim`).
+- **Non-Root Execution**: Containers execute under an unprivileged user (`appuser`, UID 1000). The Celery worker must never run with superuser privileges.
+- **Single Source of Truth**: All runtime dependencies belong in `pyproject.toml` under `project.dependencies`. Development and testing tools belong under `project.optional-dependencies.dev`.
 
-### 3.2 Containerization & Security
-- **Unprivileged Runtime:** Containers must execute as a non-root system user (`appuser`, UID 1000). The Celery worker must never run as superuser.
-- **Volume Isolation:** Data directories (`/app/var`) must have proper ownership assigned to `appuser`.
-- **Service Composition:** Docker Compose orchestrates five interconnected services:
-  - `api`: FastAPI application (port 8100 -> 8000)
-  - `worker`: Celery task worker (concurrency 1, late acks)
-  - `beat`: Celery beat periodic scheduler
-  - `db`: PostgreSQL 16 Alpine (port 5440 -> 5432)
-  - `redis`: Redis 7 Alpine (port 6382 -> 6379, loopback bound)
+### 8.2 Code Quality & Static Analysis Gates
+- **Linter**: Ruff configured for Python 3.12 (`py312`), line length 100, rules `E`, `F`, `I` (isort), `UP` (pyupgrade), `B` (bugbear), `ISC` (implicit string concat).
+- **Mandatory Pre-Commit Checks**:
+  1. `ruff check app tests migrations scripts` must report 0 errors.
+  2. `python -m compileall -q app tests migrations scripts` must compile cleanly with 0 errors.
 
-### 3.3 Code Quality & Linting
-- **Linter & Formatter:** Ruff.
-- **Configuration:**
-  - Target: Python 3.12 (`py312`).
-  - Line length: 100 characters.
-  - Rules enabled: `E`, `F`, `I` (isort), `UP` (pyupgrade), `B` (bugbear), `ISC` (implicit string concat).
-- **Zero-Tolerance Quality Gates:**
-  - `ruff check app tests migrations scripts` must exit with 0 errors.
-  - `python -m compileall -q app tests migrations scripts` must compile cleanly with 0 errors.
-
-### 3.4 Automated Testing & Acceptance Scenarios
-- **Test Runner:** `pytest`.
-- **Coverage Requirement:** All unit, router, security, and worker configuration tests must maintain a 100% pass rate.
-- **Phase L Acceptance Scenarios:** Any change touching the pipeline must pass all 10 end-to-end scenarios in `tests/test_end_to_end_scenarios.py`:
+### 8.3 Automated Testing & Acceptance Gates
+- **Test Runner**: `pytest`.
+- **Pass Rate**: 100% of all unit, router, security, worker, and integration tests must pass.
+- **Phase L Acceptance Scenarios**: All changes affecting the pipeline must pass all 10 end-to-end scenarios in `tests/test_end_to_end_scenarios.py`:
   1. Complete ingestion pipeline
   2. Duplicate ingestion prevention
   3. Risky opportunity screening & budget suppression
@@ -153,10 +225,9 @@ Every contributor, agent, and reviewer must adhere to these rules without except
   8. Worker crash recovery & idempotency
   9. LLM failure fallback to rules
   10. Cross-system analytics database consistency
-- **Test Isolation:** Tests must use SQLite in-memory databases with session fixtures and mock transports for external HTTP/Telegram calls. Tests must never perform network requests to live Telegram channels or public third-party services.
+- **Test Isolation**: Tests must run against SQLite in-memory databases with session fixtures and mock transports for external HTTP and Telegram networks. Tests must never make live calls to external services.
 
-### 3.5 Git & Secret Hygiene
-- **Branch Protection:** Never commit directly to `main`. Use feature or verification branches (e.g. `qa/system-integration-verification`).
-- **Secret Redaction:**
-  - `.env` and `*.session` files must remain strictly listed in `.gitignore`.
-  - API keys, hashes, and session strings must never be committed to Git or printed in application logs.
+### 8.4 Git & Release Hygiene
+- **Branch Protection**: Never commit directly to `main`. Use structured feature or QA branches (e.g. `qa/system-integration-verification`).
+- **Clean Diffs**: Avoid touching unrelated files or reformating code outside the scope of the task.
+- **Documentation Parity**: Whenever endpoints, models, configuration, or workflows change, update `README.md`, `rules.md`, and documentation under `docs/` in the same commit.

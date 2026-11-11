@@ -196,9 +196,9 @@ These aggregates read only collected content and publication records. They never
 
 Status is tracked with evidence in [`docs/audit/MILESTONE_EXECUTION.md`](docs/audit/MILESTONE_EXECUTION.md).
 
-1. ✅ Telegram authorized-channel collector using Telethon.
-2. ✅ Redis/Celery processing pipeline and retry policy.
-3. ✅ LLM extraction behind a provider interface with strict Pydantic validation.
-4. ✅ Admin dashboard integration and authenticated service-to-service access.
-5. ✅ Telegram publisher with explicit approval and attribution.
-6. ✅ Analytics, source quality, and market insights.
+1. [x] Telegram authorized-channel collector using Telethon.
+2. [x] Redis/Celery processing pipeline and retry policy.
+3. [x] LLM extraction behind a provider interface with strict Pydantic validation.
+4. [x] Admin dashboard integration and authenticated service-to-service access.
+5. [x] Telegram publisher with explicit approval and attribution.
+6. [x] Analytics, source quality, and market insights.

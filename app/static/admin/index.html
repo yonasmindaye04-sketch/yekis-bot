@@ -85,19 +85,18 @@
     .spacer { flex: 1; }
     .pill {
       font-size: 12px;
-      padding: 4px 10px;
-      border-radius: 999px;
-      border: 1px solid var(--line);
       color: var(--text-muted);
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      background: var(--panel);
+      background: transparent;
+      border: none;
+      padding: 0;
+      font-weight: 600;
     }
-    .pill.ok { color: var(--ok); border-color: var(--ok-border); background: var(--ok-soft); }
-    .pill.bad { color: var(--danger); border-color: var(--danger-border); background: var(--danger-soft); }
-    .pill.role { color: var(--blue); border-color: var(--blue-border); background: var(--blue-soft); font-weight: 600; }
-    .pill .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+    .pill.ok { color: var(--ok); }
+    .pill.bad { color: var(--danger); }
+    .pill.role { color: var(--blue); }
 
     main {
       flex: 1;
@@ -243,45 +242,31 @@
     }
 
     .badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
+      display: inline-block;
       font-size: 11px;
-      font-weight: 600;
-      padding: 3px 8px;
-      border-radius: 999px;
-      border: 1px solid var(--line);
-      color: var(--text-muted);
-      background: var(--panel-2);
+      font-weight: 700;
+      padding: 0;
+      background: transparent;
+      border: none;
       text-transform: uppercase;
-      letter-spacing: 0.3px;
+      letter-spacing: 0.5px;
     }
     .badge.approved, .badge.active, .badge.published {
       color: var(--ok);
-      border-color: var(--ok-border);
-      background: var(--ok-soft);
     }
     .badge.rejected, .badge.inactive, .badge.failed {
       color: var(--danger);
-      border-color: var(--danger-border);
-      background: var(--danger-soft);
     }
     .badge.pending_review, .badge.scheduled {
       color: var(--blue);
-      border-color: var(--blue-border);
-      background: var(--blue-soft);
     }
     .badge.needs_review, .badge.sending, .badge.risk {
       color: var(--warn);
-      border-color: var(--warn-border);
-      background: var(--warn-soft);
     }
     .badge.skill {
       color: #93c5fd;
-      background: rgba(147, 197, 253, 0.1);
-      border-color: rgba(147, 197, 253, 0.25);
       text-transform: none;
-      font-weight: 500;
+      font-weight: 600;
       font-size: 12px;
     }
 
@@ -474,11 +459,11 @@
     <!-- Main Workspace (Visible once connected) -->
     <div id="workspace" class="hidden">
       <nav class="tabs">
-        <button data-tab="review" class="active">📋 Review queue <span class="badge-count" id="badgePending">-</span></button>
-        <button data-tab="ingest">⚡ Ingest Post</button>
-        <button data-tab="sources">🌐 Sources <span class="badge-count" id="badgeSources">-</span></button>
-        <button data-tab="publications">📢 Publications</button>
-        <button data-tab="analytics">📊 Analytics & Insights</button>
+        <button data-tab="review" class="active">Review queue <span class="badge-count" id="badgePending">-</span></button>
+        <button data-tab="ingest">Ingest Post</button>
+        <button data-tab="sources">Sources <span class="badge-count" id="badgeSources">-</span></button>
+        <button data-tab="publications">Publications</button>
+        <button data-tab="analytics">Analytics & Insights</button>
       </nav>
 
       <!-- TAB: REVIEW QUEUE -->
@@ -500,12 +485,12 @@
                 <label>Risk Screening</label>
                 <select id="reviewRisk" style="width: 170px;">
                   <option value="false">all items</option>
-                  <option value="true">⚠️ risk-flagged only</option>
+                  <option value="true">Risk-flagged only</option>
                 </select>
               </div>
             </div>
             <div style="align-self: flex-end;">
-              <button id="refreshReviewBtn">🔄 Refresh</button>
+              <button id="refreshReviewBtn">Refresh</button>
             </div>
           </div>
         </div>
@@ -516,7 +501,7 @@
       <section id="tab-ingest">
         <div class="card">
           <div class="card-header">
-            <h3>⚡ Manual Ingestion & Real-Time Extraction</h3>
+            <h3>Manual Ingestion & Real-Time Extraction</h3>
             <span class="pill">Collector / Admin role</span>
           </div>
           <p style="color: var(--text-muted); font-size: 13px; margin-top: 0;">
@@ -557,7 +542,7 @@
           </div>
 
           <div class="row" style="margin-top: 20px;">
-            <button class="primary" id="submitIngestBtn">🚀 Ingest & Process</button>
+            <button class="primary" id="submitIngestBtn">Ingest & Process</button>
             <span id="ingestMsg" style="font-size: 13px; color: var(--text-muted);"></span>
           </div>
           <div class="error hidden" id="ingestError"></div>
@@ -570,7 +555,7 @@
       <section id="tab-sources">
         <div class="card">
           <div class="card-header">
-            <h3>🌐 Register Channel or Web Source</h3>
+            <h3>Register Channel or Web Source</h3>
             <span class="pill">Admin role required</span>
           </div>
           <div class="grid">
@@ -605,7 +590,7 @@
         <div class="card" style="padding: 14px 18px;">
           <div class="row" style="justify-content: space-between;">
             <h3 style="margin: 0; font-size: 15px;">Configured Sources</h3>
-            <button id="refreshSourcesBtn">🔄 Refresh Sources</button>
+            <button id="refreshSourcesBtn">Refresh Sources</button>
           </div>
         </div>
         <div id="sourceList"><div class="loading">Loading sources…</div></div>
@@ -619,7 +604,7 @@
               <h3 style="margin: 0 0 4px; font-size: 15px;">Published & Scheduled Broadcasts</h3>
               <span style="color: var(--text-muted); font-size: 12px;">Telegram channel publications require reviewer approval and destination allowlist.</span>
             </div>
-            <button id="refreshPublicationsBtn">🔄 Refresh Publications</button>
+            <button id="refreshPublicationsBtn">Refresh Publications</button>
           </div>
         </div>
         <div id="publicationList"><div class="loading">Loading publication history…</div></div>
@@ -630,7 +615,7 @@
         <div class="card" style="padding: 14px 18px;">
           <div class="row" style="justify-content: space-between;">
             <h3 style="margin: 0; font-size: 15px;">System Intelligence & Market Analytics</h3>
-            <button id="refreshAnalyticsBtn">🔄 Refresh Metrics</button>
+            <button id="refreshAnalyticsBtn">Refresh Metrics</button>
           </div>
         </div>
 
@@ -710,12 +695,12 @@
       const id = item.id;
       const flags = item.risk_flags || [];
       const isFlagged = flags.length > 0 || item.risk_score > 0;
-      const riskPills = flags.map((f) => `<span class="badge risk">⚠️ ${esc(f)}</span>`).join(" ");
+      const riskPills = flags.map((f) => `<span class="badge risk">[RISK: ${esc(f)}]</span>`).join(" ");
       const skillsPills = (item.skills || []).map((s) => `<span class="badge skill">${esc(s)}</span>`).join(" ");
 
       const origText = item.original_text || "(Original content not attached or post record deleted)";
       const extId = item.external_id ? `<code>${esc(item.external_id)}</code>` : "—";
-      const origUrl = item.original_url ? `<a href="${esc(item.original_url)}" target="_blank" rel="noopener" style="color:var(--accent);">View source message ↗</a>` : "";
+      const origUrl = item.original_url ? `<a href="${esc(item.original_url)}" target="_blank" rel="noopener" style="color:var(--accent);">View source message &rarr;</a>` : "";
 
       return `
       <div class="item ${isFlagged ? "flagged" : ""}" id="opp-${id}">
@@ -802,14 +787,14 @@
         <!-- Actions Bar -->
         <div class="row" style="margin-top: 14px; justify-content: space-between;">
           <div class="row" style="gap: 8px;">
-            <button class="ok small" data-action="review" data-id="${id}" data-decision="approved">✅ Approve</button>
-            <button class="warn small" data-action="review" data-id="${id}" data-decision="needs_review">⚠️ Needs Review</button>
-            <button class="danger small" data-action="review" data-id="${id}" data-decision="rejected">❌ Reject</button>
-            <button class="small" data-action="save" data-id="${id}">💾 Save Edits</button>
-            ${item.review_status === "approved" ? `<button class="primary small" data-action="publish" data-id="${id}">📢 Publish</button>` : ""}
+            <button class="ok small" data-action="review" data-id="${id}" data-decision="approved">Approve</button>
+            <button class="warn small" data-action="review" data-id="${id}" data-decision="needs_review">Needs Review</button>
+            <button class="danger small" data-action="review" data-id="${id}" data-decision="rejected">Reject</button>
+            <button class="small" data-action="save" data-id="${id}">Save Edits</button>
+            ${item.review_status === "approved" ? `<button class="primary small" data-action="publish" data-id="${id}">Publish</button>` : ""}
           </div>
           <div class="row">
-            <button class="small" data-action="toggle-history" data-id="${id}">📜 History</button>
+            <button class="small" data-action="toggle-history" data-id="${id}">History</button>
             <span class="item-meta" id="msg-${id}"></span>
           </div>
         </div>
@@ -930,7 +915,7 @@
               <span><strong>${esc(ev.actor || "system")}</strong> (${esc(ev.event_type)})</span>
               <span>${new Date(ev.created_at).toLocaleString()}</span>
             </div>
-            ${ev.from_status || ev.to_status ? `<div>Transition: <code>${esc(ev.from_status || "—")}</code> ➔ <code>${esc(ev.to_status || "—")}</code></div>` : ""}
+            ${ev.from_status || ev.to_status ? `<div>Transition: <code>${esc(ev.from_status || "—")}</code> &rarr; <code>${esc(ev.to_status || "—")}</code></div>` : ""}
             ${ev.note ? `<div style="color:var(--text-muted); margin-top:2px;">Note: <em>${esc(ev.note)}</em></div>` : ""}
             ${ev.diff && Object.keys(ev.diff).length ? `<div style="margin-top:4px;"><pre>${esc(JSON.stringify(ev.diff, null, 2))}</pre></div>` : ""}
           </div>
@@ -1009,7 +994,7 @@
             </div>
             ${opp.risk_flags && opp.risk_flags.length ? `<div style="margin-top:10px;"><strong>Flags:</strong> ${opp.risk_flags.map((f)=>badge(f,"risk")).join(" ")}</div>` : ""}
             <div class="row" style="margin-top:14px;">
-              <button class="primary small" id="jumpToReviewBtn" data-id="${opp.id}">Review Opportunity #${opp.id} ➔</button>
+              <button class="primary small" id="jumpToReviewBtn" data-id="${opp.id}">Review Opportunity #${opp.id} &rarr;</button>
             </div>
           </div>
         `;
@@ -1227,7 +1212,7 @@
           <!-- Market Insights Section -->
           <div class="grid-2">
             <div class="card">
-              <h3 class="card-title">🔥 Top In-Demand Skills</h3>
+              <h3 class="card-title">Top In-Demand Skills</h3>
               <div style="display:flex; flex-wrap:wrap; gap:8px;">
                 ${((market.skills_demand || []).map((sk) => `<span class="badge skill" style="font-size:13px; padding:4px 10px;">${esc(sk.key)} <strong style="margin-left:4px; color:var(--text);">${sk.count}</strong></span>`).join("")) || '<span style="color:var(--text-dim);">No skills indexed yet.</span>'}
               </div>
@@ -1242,7 +1227,7 @@
             </div>
 
             <div class="card">
-              <h3 class="card-title">💰 Compensation Distribution</h3>
+              <h3 class="card-title">Compensation Distribution</h3>
               ${((market.budget || []).map((stats) => `
                 <div style="margin-bottom:14px; padding:10px; background:var(--bg-alt); border-radius:var(--radius-sm);">
                   <div style="font-weight:600; color:var(--accent); font-size:14px; margin-bottom:4px;">${esc(stats.currency)} (${stats.count} opportunities)</div>
@@ -1258,7 +1243,7 @@
 
           <!-- Source Performance Table -->
           <div class="card">
-            <h3 class="card-title">🌐 Source Performance & Collector Health</h3>
+            <h3 class="card-title">Source Performance & Collector Health</h3>
             <table>
               <thead>
                 <tr>
@@ -1293,7 +1278,7 @@
 
           <!-- Activity Trends (30 Days) -->
           <div class="card">
-            <h3 class="card-title">📈 30-Day Activity Trends</h3>
+            <h3 class="card-title">30-Day Activity Trends</h3>
             <div style="font-size:12px; color:var(--text-muted); margin-bottom:12px;">Daily aggregated pipeline activity</div>
             <table>
               <thead>
