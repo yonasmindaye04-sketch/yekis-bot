@@ -1,8 +1,13 @@
-"""Telethon client adapter.
+"""Telethon collector client.
+
+Collection uses a **user account** session. Telegram bots cannot read channel
+history: the API rejects ``GetHistoryRequest`` for bot accounts with
+``BotMethodInvalidError``. A bot token is therefore used for publishing only
+(see ``publisher.py``).
 
 Telethon is imported lazily so the API process (and the test suite) do not need
 a Telegram session, network access, or credentials. The session file is an
-account credential: it is created under TELEGRAM_SESSION_PATH, which is
+account credential: it is created under ``TELEGRAM_SESSION_PATH``, which is
 git-ignored, and is never logged.
 """
 
@@ -21,6 +26,10 @@ logger = logging.getLogger(__name__)
 
 class TelegramNotConfigured(RuntimeError):
     pass
+
+
+class TelegramBotCannotReadHistory(RuntimeError):
+    """Raised when a bot session is used where a user session is required."""
 
 
 class TelethonClient:
@@ -47,11 +56,6 @@ class TelethonClient:
             self._settings.telegram_api_id,
             self._settings.telegram_api_hash,
         )
-        if self._settings.telegram_bot_token:
-            # Telethon creates/uses the same session file but signs in as a bot.
-            await self._client.start(bot_token=self._settings.telegram_bot_token)
-            return self._client
-
         await self._client.connect()
         if not await self._client.is_user_authorized():
             await self._client.disconnect()
@@ -71,20 +75,29 @@ class TelethonClient:
         username = getattr(entity, "username", None) or reference
         collected: list[ChannelMessage] = []
         # reverse=True keeps oldest-first so checkpoints move monotonically.
-        async for message in client.iter_messages(
-            entity, min_id=min_id, limit=limit, reverse=True
-        ):
-            text = (message.message or "").strip()
-            if not text:
-                continue
-            collected.append(
-                ChannelMessage(
-                    message_id=int(message.id),
-                    text=text,
-                    url=message_url(username, int(message.id)),
-                    posted_at=message.date,
+        try:
+            async for message in client.iter_messages(
+                entity, min_id=min_id, limit=limit, reverse=True
+            ):
+                text = (message.message or "").strip()
+                if not text:
+                    continue
+                collected.append(
+                    ChannelMessage(
+                        message_id=int(message.id),
+                        text=text,
+                        url=message_url(username, int(message.id)),
+                        posted_at=message.date,
+                    )
                 )
-            )
+        except Exception as exc:  # noqa: BLE001 - normalized for the operator
+            if type(exc).__name__ == "BotMethodInvalidError":
+                raise TelegramBotCannotReadHistory(
+                    "This Telegram session is a bot. Bots cannot read channel "
+                    "history (GetHistoryRequest is restricted). Log in with a user "
+                    "account: python -m app.integrations.telegram.login --as user"
+                ) from exc
+            raise
         logger.info(
             "telegram fetch channel=%s min_id=%s fetched=%s", reference, min_id, len(collected)
         )

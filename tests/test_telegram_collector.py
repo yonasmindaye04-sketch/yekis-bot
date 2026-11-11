@@ -11,6 +11,7 @@ from app.integrations.telegram.base import ChannelMessage
 from app.integrations.telegram.channel import InvalidChannelReference, channel_reference
 from app.integrations.telegram.client import (
     FakeTelegramClient,
+    TelegramBotCannotReadHistory,
     TelegramNotConfigured,
     TelethonClient,
 )
@@ -199,16 +200,22 @@ def test_telethon_client_refuses_to_start_without_credentials():
         asyncio.run(client.fetch_messages("@channel", 0, 10))
 
 
-def test_telethon_client_uses_bot_token_non_interactively(monkeypatch, tmp_path):
+def test_telethon_collector_never_uses_a_bot_token(monkeypatch, tmp_path):
+    """Collection must use a user session: bots cannot read channel history."""
+
     class FakeTelegramClient:
         def __init__(self, *args, **kwargs):
-            self.bot_token = None
+            self.started_with_bot_token = False
 
         async def start(self, bot_token=None):
-            self.bot_token = bot_token
+            self.started_with_bot_token = bot_token is not None
+            return None
 
         async def connect(self):
-            raise AssertionError("the bot-token path must not call connect")
+            return None
+
+        async def is_user_authorized(self):
+            return True
 
         async def disconnect(self):
             return None
@@ -226,7 +233,53 @@ def test_telethon_client_uses_bot_token_non_interactively(monkeypatch, tmp_path)
 
     asyncio.run(client._ensure_client())
 
-    assert client._client.bot_token == "test-bot-token"
+    assert client._client.started_with_bot_token is False
+
+
+def test_bot_session_history_error_is_explained(monkeypatch, tmp_path):
+    """A bot session must produce actionable guidance, not a raw RPC error."""
+
+    class BotMethodInvalidError(Exception):
+        pass
+
+    class FakeTelegramClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def connect(self):
+            return None
+
+        async def is_user_authorized(self):
+            return True
+
+        async def get_entity(self, reference):
+            return type("Entity", (), {"username": "channel"})()
+
+        def iter_messages(self, *args, **kwargs):
+            async def generator():
+                raise BotMethodInvalidError(
+                    "The method you tried to invoke cannot be executed as a bot"
+                )
+                yield  # pragma: no cover
+
+            return generator()
+
+        async def disconnect(self):
+            return None
+
+    monkeypatch.setitem(
+        sys.modules, "telethon", types.SimpleNamespace(TelegramClient=FakeTelegramClient)
+    )
+    stub_settings = types.SimpleNamespace(
+        telegram_api_id=123,
+        telegram_api_hash="hash",
+        telegram_session_path=str(tmp_path / "session"),
+        telegram_bot_token="test-bot-token",
+    )
+    client = TelethonClient(settings=stub_settings)
+
+    with pytest.raises(TelegramBotCannotReadHistory, match="--as user"):
+        asyncio.run(client.fetch_messages("@channel", 0, 10))
 
 
 def test_backoff_is_bounded_and_increases():

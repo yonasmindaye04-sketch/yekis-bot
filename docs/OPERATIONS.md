@@ -258,10 +258,21 @@ TELEGRAM_SESSION_PATH=var/telegram_collector
 3. Authorize the session once:
 
 ```bash
-python -m app.integrations.telegram.login
+# User account — REQUIRED for reading channel history (the collector)
+python -m app.integrations.telegram.login --as user
+
+# Bot — optional, used for publishing
+python -m app.integrations.telegram.login --as bot
 ```
 
-For a user account, enter the phone number and login code. For a bot, set `TELEGRAM_BOT_TOKEN` first and the command logs in non-interactively; the bot must already be a member/admin of the channels it should read or publish to. The session file is a credential. It is git-ignored and must never be copied into an image or a log.
+**Telegram account model (important):** bots cannot read channel history. The API rejects `GetHistoryRequest` for bot accounts with `BotMethodInvalidError`. Therefore:
+
+| Purpose | Account type | Session path |
+|---|---|---|
+| Collect messages | **User** (phone + code + optional 2FA) | `TELEGRAM_SESSION_PATH` (`var/telegram_user`) |
+| Publish messages | Bot (token from BotFather) or user | `TELEGRAM_BOT_SESSION_PATH` (`var/telegram_bot`) |
+
+A bot must already be a member/admin of the channel it publishes to. The session files are credentials: git-ignored, never copied into an image or a log.
 
 4. Run a collection:
 
@@ -295,6 +306,8 @@ Look at:
 | `skipped_reason=source_inactive` | Re-activate the source with `PATCH /sources/{id}/status`. |
 | `skipped_reason=not_a_telegram_source` | Source type must be `telegram`. |
 | `TelegramNotConfigured` | Set `TELEGRAM_ENABLED`, `TELEGRAM_API_ID`, `TELEGRAM_API_HASH`. |
+| "Bots cannot read channel history" | The session was created with a bot token. | Log in with a user account: `python -m app.integrations.telegram.login --as user`. |
+| Collector output is `[]` | There is no active `telegram` source. | Register one with `source_type=telegram` and a public channel URL. |
 | Session not authorized | Run the login command once; keep the session file safe. |
 | Repeated `last_error` | Check channel access, account status, and network; the checkpoint does not advance on failure. |
 

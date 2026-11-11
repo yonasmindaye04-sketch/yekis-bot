@@ -438,8 +438,9 @@ Startup behavior:
 | `TELEGRAM_ENABLED` | `false` | Gate for the collector CLI/task. |
 | `TELEGRAM_API_ID` | unset | From `my.telegram.org`; environment only. |
 | `TELEGRAM_API_HASH` | unset | From `my.telegram.org`; never commit or log. |
-| `TELEGRAM_BOT_TOKEN` | unset | Optional bot login token from BotFather; the bot must be a member/admin of the target channel. Leave unset for a user account. |
-| `TELEGRAM_SESSION_PATH` | `var/telegram_collector` | Session file path; `var/` and `*.session*` are git-ignored. |
+| `TELEGRAM_BOT_TOKEN` | unset | Bot token from BotFather, used for **publishing only**. Bots cannot read channel history. |
+| `TELEGRAM_SESSION_PATH` | `var/telegram_user` | User session used by the **collector**; created with `login --as user`. |
+| `TELEGRAM_BOT_SESSION_PATH` | `var/telegram_bot` | Bot session used by the publisher; created with `login --as bot`. |
 | `TELEGRAM_FETCH_LIMIT` | `100` | Maximum messages per fetch. |
 
 ### Background processing
@@ -651,7 +652,9 @@ Keep migrations compatible with both PostgreSQL and the SQLite audit path where 
 | `alembic check` reports diffs | Model and migration drifted. | Add a migration and re-run. |
 | Worker does nothing | Redis or worker/beat not running. | Start `worker` and `beat`; check `REDIS_URL`. |
 | Collector skips a source | Source inactive, not `telegram`, in backoff, or not configured. | Check `is_active`, `source_type`, `next_attempt_at`, `last_error`. |
-| Collector fails at login | Missing/invalid Telegram credentials or unauthorized session. | Set `TELEGRAM_API_ID`/`HASH`, run `python -m app.integrations.telegram.login` once. |
+| Collector fails at login | Missing/invalid Telegram credentials or unauthorized session. | Set `TELEGRAM_API_ID`/`HASH`, run `python -m app.integrations.telegram.login --as user` once. |
+| Collector says "Bots cannot read channel history" | The session was created with a bot token. | Re-authenticate as a user: `python -m app.integrations.telegram.login --as user`. |
+| Collector returns `[]` | No active `telegram` source exists. | Register a source with `source_type=telegram` and a public channel URL. |
 | Publishing returns `publishing_disabled` | `PUBLISHING_ENABLED=false`. | Enable it only for an approved test channel. |
 | Publishing returns `channel_not_allowed` | Destination missing from the allowlist. | Add the channel to `PUBLISHING_ALLOWED_CHANNELS`. |
 | Publishing returns `publication_unknown` | A previous attempt is still in `sending`. | Check the channel manually; do not blindly resend. |
@@ -669,6 +672,7 @@ Keep migrations compatible with both PostgreSQL and the SQLite audit path where 
 These are explicit, not hidden:
 
 - **Live integrations are not yet verified in this environment.** Telegram collection/publishing, Redis/Celery, PostgreSQL, and live Gemini/OpenAI calls were tested with fakes or SQLite. The Gemini adapter is covered by a mock HTTP transport; the audit records each gap.
+- **Telegram account model:** bots cannot read channel history (`GetHistoryRequest` is restricted for bot accounts). Collection requires a user session; a bot token is used only for publishing.
 - **Static API keys.** No rotation UI or per-key revocation workflow. Rotate by editing `AUTH_API_KEYS` and restarting.
 - **No rate limiting or request-body cap yet.** Keep the service on a trusted network until these land.
 - **No CI workflow committed.** Run the local quality gates before merging; the test suite is fast enough.

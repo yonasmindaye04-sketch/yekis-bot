@@ -40,7 +40,50 @@
       --shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     }
+    :root[data-theme="light"] {
+      color-scheme: light;
+      --bg: #f8fafc;
+      --bg-alt: #ffffff;
+      --panel: #ffffff;
+      --panel-2: #f8fafc;
+      --panel-3: #e2e8f0;
+      --line: #cbd5e1;
+      --line-subtle: #e2e8f0;
+      --text: #0f172a;
+      --text-muted: #475569;
+      --text-dim: #64748b;
+      --accent: #0d9488;
+      --accent-hover: #0f766e;
+      --accent-soft: rgba(13, 148, 136, 0.10);
+      --accent-border: rgba(13, 148, 136, 0.30);
+      --warn: #b45309;
+      --warn-soft: rgba(180, 83, 9, 0.10);
+      --warn-border: rgba(180, 83, 9, 0.30);
+      --danger: #dc2626;
+      --danger-soft: rgba(220, 38, 38, 0.10);
+      --danger-border: rgba(220, 38, 38, 0.30);
+      --ok: #059669;
+      --ok-soft: rgba(5, 150, 105, 0.10);
+      --ok-border: rgba(5, 150, 105, 0.30);
+      --blue: #2563eb;
+      --blue-soft: rgba(37, 99, 235, 0.10);
+      --blue-border: rgba(37, 99, 235, 0.30);
+      --purple: #7c3aed;
+      --shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    }
+    :root[data-theme="light"] .orig-text {
+      color: #1e293b;
+      background: #f1f5f9;
+    }
+    :root[data-theme="light"] code {
+      background: #e2e8f0;
+      color: #0f172a;
+    }
     * { box-sizing: border-box; }
+    html, body {
+      overflow-x: hidden;
+      width: 100%;
+    }
     body {
       margin: 0;
       background: var(--bg);
@@ -71,16 +114,14 @@
       letter-spacing: -0.2px;
     }
     .brand-icon {
-      width: 28px;
-      height: 28px;
-      border-radius: 8px;
-      background: linear-gradient(135deg, var(--accent), #3b82f6);
-      display: flex;
+      font-size: 20px;
+      font-weight: 900;
+      color: var(--accent);
+      display: inline-flex;
       align-items: center;
       justify-content: center;
-      color: #0b0f14;
-      font-weight: 900;
-      font-size: 15px;
+      background: transparent;
+      border: none;
     }
     .spacer { flex: 1; }
     .pill {
@@ -414,17 +455,90 @@
     th { text-align: left; padding: 10px 12px; border-bottom: 2px solid var(--line); color: var(--text-muted); font-size: 11px; text-transform: uppercase; }
     td { padding: 10px 12px; border-bottom: 1px solid var(--line-subtle); }
     tr:hover td { background: var(--panel-2); }
+
+    .table-container {
+      width: 100%;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      border-radius: var(--radius-sm);
+    }
+
+    .date-filter-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .date-filter-group input[type="date"] {
+      width: 150px !important;
+    }
+
+    @media (max-width: 640px) {
+      main {
+        padding: 12px;
+      }
+      header {
+        padding: 10px 12px;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .brand {
+        font-size: 15px;
+      }
+      .kpi-grid {
+        grid-template-columns: repeat(2, 1fr) !important;
+        gap: 8px;
+      }
+      .kpi-card {
+        padding: 10px 12px;
+      }
+      .kpi-value {
+        font-size: 20px;
+      }
+      .grid-2 {
+        grid-template-columns: 1fr;
+      }
+      .item {
+        padding: 14px;
+      }
+      .tabs {
+        gap: 4px;
+        margin-bottom: 14px;
+        padding-bottom: 8px;
+      }
+      .tabs button {
+        padding: 8px 10px;
+        font-size: 12px;
+        min-height: 44px;
+      }
+      button, input, select, textarea {
+        min-height: 44px;
+      }
+      input, select, textarea {
+        font-size: 16px !important;
+      }
+      button.small {
+        min-height: 40px;
+        padding: 6px 10px;
+      }
+      .row {
+        gap: 8px;
+      }
+      .card {
+        padding: 14px;
+      }
+    }
   </style>
 </head>
 <body>
   <header>
     <div class="brand">
-      <div class="brand-icon">Y</div>
+      <span class="brand-icon">Y</span>
       <span>Yekis Intelligence</span>
     </div>
-    <span class="pill" id="connection"><span class="dot"></span> not connected</span>
+    <span class="pill" id="connection">not connected</span>
     <span class="pill role hidden" id="userRole"></span>
     <div class="spacer"></div>
+    <button class="small" id="themeToggleBtn" title="Switch Theme">Light Mode</button>
     <button class="small" id="logoutBtn">Forget key</button>
   </header>
 
@@ -488,6 +602,14 @@
                   <option value="true">Risk-flagged only</option>
                 </select>
               </div>
+              <div>
+                <label>Created Date Range</label>
+                <div class="date-filter-group">
+                  <input type="date" id="reviewDateFrom" aria-label="Review date start">
+                  <span style="color: var(--text-dim); font-size: 12px;">to</span>
+                  <input type="date" id="reviewDateTo" aria-label="Review date end">
+                </div>
+              </div>
             </div>
             <div style="align-self: flex-end;">
               <button id="refreshReviewBtn">Refresh</button>
@@ -500,12 +622,9 @@
       <!-- TAB: INGEST POST -->
       <section id="tab-ingest">
         <div class="card">
-          <div class="card-header">
-            <h3>Manual Ingestion & Real-Time Extraction</h3>
-            <span class="pill">Collector / Admin role</span>
-          </div>
-          <p style="color: var(--text-muted); font-size: 13px; margin-top: 0;">
-            Ingest freelance jobs, gigs, or channel messages to run them through extraction, classification, quality scoring, and risk screening.
+          <h3 style="margin: 0 0 4px; font-size: 16px;">Manual Ingestion & Real-Time Extraction</h3>
+          <p style="color: var(--text-muted); font-size: 13px; margin: 0 0 16px;">
+            Ingest freelance jobs, gigs, or channel messages to run them through extraction, classification, quality scoring, and risk screening. Requires Collector or Admin role.
           </p>
 
           <div class="grid-2">
@@ -554,10 +673,10 @@
       <!-- TAB: SOURCES -->
       <section id="tab-sources">
         <div class="card">
-          <div class="card-header">
-            <h3>Register Channel or Web Source</h3>
-            <span class="pill">Admin role required</span>
-          </div>
+          <h3 style="margin: 0 0 4px; font-size: 16px;">Register Channel or Web Source</h3>
+          <p style="color: var(--text-muted); font-size: 13px; margin: 0 0 16px;">
+            Connect public Telegram channels or online sources for automated discovery and collection. Requires Admin role.
+          </p>
           <div class="grid">
             <div>
               <label for="srcName">Source Name</label>
@@ -604,7 +723,14 @@
               <h3 style="margin: 0 0 4px; font-size: 15px;">Published & Scheduled Broadcasts</h3>
               <span style="color: var(--text-muted); font-size: 12px;">Telegram channel publications require reviewer approval and destination allowlist.</span>
             </div>
-            <button id="refreshPublicationsBtn">Refresh Publications</button>
+            <div class="row" style="align-items: center; gap: 10px;">
+              <div class="date-filter-group">
+                <input type="date" id="pubDateFrom" aria-label="Broadcast date start">
+                <span style="color: var(--text-dim); font-size: 12px;">to</span>
+                <input type="date" id="pubDateTo" aria-label="Broadcast date end">
+              </div>
+              <button id="refreshPublicationsBtn">Refresh Publications</button>
+            </div>
           </div>
         </div>
         <div id="publicationList"><div class="loading">Loading publication history…</div></div>

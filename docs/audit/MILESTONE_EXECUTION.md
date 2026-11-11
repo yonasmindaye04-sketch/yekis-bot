@@ -417,3 +417,65 @@ GEMINI_BASE_URL=https://generativelanguage.googleapis.com/v1beta
 | 3 | Gemini mock-transport tests | header/body shape, untrusted-content delimiters, no key in body/`repr`, schema rejection, safety-block handling, fallback, `extraction_method=gemini` |
 
 **Not verified:** no live Gemini request was made (no AI Studio key in the audit environment). The adapter is proven against a mock HTTP transport; a live smoke test is the next step once a key and model are available. A live failure is designed to degrade to `rules_fallback`, not to lose the post.
+
+---
+
+## Functional verification pass (live API + live integrations)
+
+A full functional check was executed against the running service and the real PostgreSQL database.
+
+### Live API verification
+
+`scripts/smoke_test.py` drives the running API over HTTP and asserts the complete product workflow. Result: **54/54 checks passed**.
+
+| Area | Verified live |
+|---|---|
+| Public surface | `/health` (DB connected), `/admin/` dashboard served, `/` banner |
+| Auth | anonymous → 401, bad key → 401, reviewer blocked from admin route → 403, collector blocked from review → 403 |
+| Sources | create (201), edit, status toggle off/on |
+| Ingestion | ingest (201), type/category/budget/skill extraction, review-queue routing, duplicate → 409 `duplicate_post` |
+| Risk | risky post still ingested, routed to `needs_review`, `upfront_payment` flag present, bait amount not stored as budget |
+| Original text | stored verbatim and listed back |
+| Review | approve, note persisted, attributed to the key principal, one audit event per transition |
+| Transitions | `approved → needs_review`, `needs_review → approved` allowed; repeated identical decision creates no extra event |
+| Edits | field edit persists and writes a before/after diff event; empty body → 422 |
+| Publishing | blocked with `publishing_disabled` (correct: publishing is off) |
+| Analytics | overview/source quality/market/trends respond; counts reflect reviews and risk flags; trends window bounded |
+| Validation | pagination cap → 422, bad status filter → 422, unknown id → 404 |
+
+### Database state
+
+| Check | Result |
+|---|---|
+| `alembic current` | `0005_publications` |
+| `alembic check` (PostgreSQL) | `No new upgrade operations detected.` |
+| Active `telegram` sources | `0` — this is why the collector correctly returns `[]` |
+
+### Live integration findings
+
+**Telegram account model — real defect found and fixed.** A live read against a public channel with the configured bot session failed with:
+
+```text
+telethon.errors.rpcerrorlist.BotMethodInvalidError: The API access for bot users is restricted.
+The method you tried to invoke cannot be executed as a bot (caused by GetHistoryRequest)
+```
+
+Telegram forbids bots from reading channel history. The collector previously reused the bot token, so collection could never work. Fixed:
+
+- the collector now always uses a **user** session (`TELEGRAM_SESSION_PATH`, default `var/telegram_user`);
+- the publisher keeps bot support (`TELEGRAM_BOT_TOKEN` / `TELEGRAM_BOT_SESSION_PATH`), because bots **may** send;
+- `python -m app.integrations.telegram.login --as user|bot` makes the account type explicit;
+- a bot session used for collection now raises an actionable error naming `--as user`.
+
+**Gemini wiring.** `get_provider()` selects `GeminiProvider` with `gemini-2.5-flash` and the native `generateContent` URL; the key is present, absent from `repr`, and absent from the request payload (it is sent only in the `x-goog-api-key` header). A live Gemini call was **not** made from this environment (outbound LLM calls are blocked here); the provider is proven against a mock HTTP transport.
+
+**Redis/Celery.** Broker connectivity was not exercised from this environment (external network access blocked). Worker configuration, beat schedule, retry/backoff, and dead-letter behavior are proven by the test suite in eager mode.
+
+### Final state after this pass
+
+| Check | Result |
+|---|---|
+| `pytest -q` | **119 passed** |
+| `ruff check app tests migrations scripts` | all checks passed |
+| `scripts/smoke_test.py` | **54/54 passed** |
+| `alembic check` (PostgreSQL) | no drift |

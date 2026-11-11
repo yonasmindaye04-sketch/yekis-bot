@@ -45,19 +45,28 @@ class TelethonPublisher:
         if not (
             self._settings.telegram_api_id
             and self._settings.telegram_api_hash
-            and self._settings.telegram_session_path
         ):
             raise PublisherError("telegram credentials are not configured")
         from telethon import TelegramClient
 
-        session_path = Path(self._settings.telegram_session_path)
+        # A bot token is preferred for publishing: bots may send messages.
+        # Bots may NOT read channel history, so collection uses a user session.
+        use_bot = bool(self._settings.telegram_bot_token)
+        configured_path = (
+            self._settings.telegram_bot_session_path
+            if use_bot
+            else self._settings.telegram_session_path
+        )
+        if not configured_path:
+            raise PublisherError("telegram session path is not configured")
+        session_path = Path(configured_path)
         session_path.parent.mkdir(parents=True, exist_ok=True)
         self._client = TelegramClient(
             str(session_path),
             self._settings.telegram_api_id,
             self._settings.telegram_api_hash,
         )
-        if self._settings.telegram_bot_token:
+        if use_bot:
             await self._client.start(bot_token=self._settings.telegram_bot_token)
             return self._client
 

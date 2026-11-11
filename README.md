@@ -110,8 +110,11 @@ Roles: `admin` (full access), `reviewer` (review/edit/approve), `collector` (ing
 The collector only reads channels already registered as active `telegram` sources. It never joins a channel, never reads private chats, and stores no message text in logs. Checkpoints and source health are persisted on `sources`, so two consecutive runs cannot ingest the same message twice.
 
 ```bash
-# One-time interactive login (creates the git-ignored session file)
-.venv/Scripts/python -m app.integrations.telegram.login
+# One-time login as a USER account (required for reading channel history)
+.venv/Scripts/python -m app.integrations.telegram.login --as user
+
+# Optional: one-time bot login for publishing
+.venv/Scripts/python -m app.integrations.telegram.login --as bot
 
 # Collect every active Telegram source
 .venv/Scripts/python -m app.integrations.telegram.collector
@@ -120,7 +123,9 @@ The collector only reads channels already registered as active `telegram` source
 .venv/Scripts/python -m app.integrations.telegram.collector --source-id 1 --limit 50
 ```
 
-Required environment: `TELEGRAM_ENABLED=true`, `TELEGRAM_API_ID`, `TELEGRAM_API_HASH`, and `TELEGRAM_SESSION_PATH` (defaults to `var/telegram_collector`, which is git-ignored). For a bot login, set `TELEGRAM_BOT_TOKEN`; the bot must already be a member/admin of the channels it reads or publishes to. For a user account, leave it unset and use the phone/code prompt. A failed run increments `consecutive_failures` and sets an exponential `next_attempt_at`; a subsequent run inside that window skips the source instead of hammering Telegram.
+Required environment: `TELEGRAM_ENABLED=true`, `TELEGRAM_API_ID`, `TELEGRAM_API_HASH`, and `TELEGRAM_SESSION_PATH` (defaults to `var/telegram_user`, which is git-ignored).
+
+**Important:** Telegram bots cannot read channel history — the API rejects `GetHistoryRequest` for bot accounts. The collector therefore requires a **user account** session (phone number, login code, optional 2FA). A bot token is only used for **publishing**, where bots are supported. A failed run increments `consecutive_failures` and sets an exponential `next_attempt_at`; a subsequent run inside that window skips the source instead of hammering Telegram.
 
 ## LLM extraction
 
