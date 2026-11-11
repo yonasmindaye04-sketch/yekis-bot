@@ -12,11 +12,21 @@
 | Area | Result |
 |---|---|
 | Integration | **Complete.** NVIDIA NIM works through the existing `EXTRACTION_PROVIDER=llm` path. No architecture rewrite; no new provider class. |
-| Mocked provider tests | **35 passed** (31 provider scenarios + 4 live-script logic checks). |
-| Live NVIDIA API test | **NOT RUN — blocked.** No NVIDIA API key is configured in this environment, and outbound LLM calls are blocked by the execution environment. See §5. |
-| Deterministic baseline comparison | **Recorded** in §6 so a live run can be compared field by field. |
+| Mocked provider tests | **40 passed** (provider scenarios plus live-script logic checks). |
+| **Live NVIDIA API test** | **VERIFIED.** HTTP 200 on both samples, real model id, measured latency, field-by-field comparison against deterministic extraction. |
+| **Live service verification** | **VERIFIED.** The running API ingested with `extraction_method=llm` and the full workflow smoke test passed 54/54 against the live stack with NVIDIA in the loop. |
+| Deterministic baseline comparison | **Recorded and compared** in §6. |
 
-**No live NVIDIA response was observed.** Every provider behaviour below is proven against a mocked HTTP transport. Nothing in this report should be read as a live NVIDIA verification.
+Live verification details:
+
+| Item | Value |
+|---|---|
+| Test date (UTC) | 2026-11-11T17:41:20 |
+| Base URL | `https://integrate.api.nvidia.com/v1` |
+| Model id | `minimaxai/minimax-m3.1-flash` |
+| HTTP status | `200` (both samples) |
+| Latency | 105,099 ms and 104,245 ms (see §5.2) |
+| Extraction method recorded by the service | `llm` (both samples) |
 
 ---
 
@@ -116,31 +126,79 @@ The current schema has **no separate `deadline` or `location` fields**. The extr
 
 ---
 
-## 5. Live NVIDIA verification — NOT RUN
+## 5. Live NVIDIA verification — VERIFIED
 
-**Status:** not executed.
+**Status:** executed successfully against the configured NVIDIA NIM endpoint.
 
-Reasons:
+### 5.1 Run record
 
-1. `LLM_API_KEY` is not configured in this environment (`LLM_BASE_URL` is still the OpenAI default; `EXTRACTION_PROVIDER=gemini`).
-2. Outbound LLM calls are blocked by the execution environment, so no provider credential could be used even if one were present.
+| Item | Value |
+|---|---|
+| Test date (UTC) | 2026-11-11T17:41:20 |
+| Endpoint | `POST https://integrate.api.nvidia.com/v1/chat/completions` |
+| Model id | `minimaxai/minimax-m3.1-flash` |
+| Authentication | `Authorization: Bearer <NVIDIA API key>` (never logged) |
+| Sample 1 status | `200` |
+| Sample 2 status | `200` |
+| Command | `.venv/Scripts/python.exe scripts/verify_nvidia_live.py` |
 
-The verification harness is ready at `scripts/verify_nvidia_live.py`. To run it yourself:
+### 5.2 Measured latency and the timeout fix
+
+The first live attempt **failed** with `LLM request timed out before a response was received` at the original 30-second timeout. Diagnosis:
+
+1. `GET https://integrate.api.nvidia.com/v1/models` from inside the container returned `200` in ~1,080 ms, so egress and DNS were healthy.
+2. The completion request itself was slow: measured **105,099 ms** and **104,245 ms** for the two samples. This is NVIDIA NIM cold-start/queue latency for this model, not a network fault.
+
+Fixes applied:
+
+- `LLM_TIMEOUT_SECONDS` raised to `180` in `.env` (the measured ~105 s needs real headroom).
+- Bounded provider-level retry added (`LLM_MAX_ATTEMPTS=2`, `LLM_RETRY_WAIT_SECONDS=5`) for transient failures only: timeouts, `429`, and `5xx`. Credential and schema failures are never retried.
+- The HTTP client timeout in the verification harnesses was raised (`scripts/smoke_test.py --timeout`, `scripts/verify_extraction_provider.py --timeout`) because extraction runs synchronously inside the request.
+
+**Operational consequence:** one extraction takes roughly 1.5–2 minutes with this model. The synchronous `POST /api/v1/ingestion/manual` path therefore blocks for that long. Bulk ingestion should go through the Celery collector/worker path rather than the HTTP endpoint.
+
+### 5.3 Service-level verification
+
+`scripts/verify_extraction_provider.py` ingested a legitimate post and a scam-pattern post through the **running API** (so the container's own environment and image were exercised, not the developer's shell):
+
+| Sample | `extraction_method` | Key extracted fields |
+|---|---|---|
+| Legitimate post | `llm` | category `software`, skills `python, fastapi, postgresql, docker`, budget `2500.0 USD`, duration `3 weeks`, remote `true`, no risk flags, `pending_review` |
+| Scam-pattern post | `llm` | budget suppressed to `null`, risk flags `upfront_payment, urgency_pressure, implausible_rate, off_platform_contact` (score 98), `needs_review` |
+
+`scripts/smoke_test.py` then ran the complete workflow against the live stack with NVIDIA in the loop: **54/54 checks passed** — source create/edit/toggle, ingestion, extraction, duplicate rejection, risk routing, verbatim original text, review approval, note persistence, actor attribution, audit events, transition rules, field edits with diffs, publication gate, analytics, pagination and validation.
+
+### 5.4 Reproducing it
 
 ```bash
-# 1. Configure locally (.env is git-ignored; never paste the key into chat)
+# .env (git-ignored; never paste the key into chat)
 EXTRACTION_PROVIDER=llm
 LLM_API_KEY=your_nvidia_api_key
 LLM_BASE_URL=https://integrate.api.nvidia.com/v1
-LLM_MODEL=meta/llama-3.3-70b-instruct   # exact model id from build.nvidia.com
+LLM_MODEL=minimaxai/minimax-m3.1-flash
+LLM_TIMEOUT_SECONDS=180
+LLM_MAX_ATTEMPTS=2
+LLM_RETRY_WAIT_SECONDS=5
 
-# 2. Run the live verification
+# Direct provider verification (model id, status, latency, accuracy)
 .venv/Scripts/python.exe scripts/verify_nvidia_live.py
+
+# Service-level verification (what the running stack actually used)
+.venv/Scripts/python.exe scripts/verify_extraction_provider.py --base-url http://127.0.0.1:8100
+
+# Full workflow against the live stack
+.venv/Scripts/python.exe scripts/smoke_test.py --base-url http://127.0.0.1:8100 --timeout 600
 ```
 
-It prints a JSON report containing the exact model ID, UTC test date, HTTP status, latency in milliseconds, and a field-by-field comparison against deterministic extraction. It refuses to run without a key, refuses a non-NVIDIA base URL unless `--allow-non-nvidia` is passed, and refuses to print a report that contains the key.
+### 5.5 Separate issue found: the Gemini fallback was silently broken
 
-**Fields to record when it runs:** model ID, test date, HTTP status, latency, and per-field agreement with the rules baseline in §6.
+Before the switch, the service was still on `EXTRACTION_PROVIDER=gemini` and every request fell back to rules with:
+
+```
+Gemini request failed with status 404
+```
+
+`gemini-2.5-flash` is not available for the configured AI Studio key. The rules fallback hid this completely. The Gemini adapter now explains a 404 as "the model is not available for this API key", and the Gemini model id should be set to one the key can reach (for example `gemini-flash-latest`). This does not affect NVIDIA, which is now the active provider.
 
 ---
 
@@ -184,7 +242,22 @@ Computed with the current rules extractor on the two sample posts used by the li
 
 ### Known difference to watch for
 
-The rules taxonomy groups `docker` under the `devops` skill, while a language model will normally return `docker` and `postgresql` as separate skills. The live comparison will therefore show a skill-set difference that is a **taxonomy difference, not an error**. The merged result keeps provider skills when the provider returns any.
+The rules taxonomy groups `docker` under the `devops` skill, while the model returns `docker` and `postgresql` as separate skills. The live comparison therefore shows a skill-set difference that is a **taxonomy difference, not an error**: the merged result keeps provider skills when the provider returns any. Provider skill casing is now normalised to lowercase (the same form the rules extractor emits) so analytics do not split `Python` and `python` into separate demand entries.
+
+### Live comparison result (2026-11-11)
+
+| Field | Sample A provider vs rules | Sample B provider vs rules |
+|---|---|---|
+| opportunity_type | `freelance_job` = `freelance_job` | `freelance_job` = `freelance_job` |
+| category | `software` = `software` | `other` vs `None` (provider is more specific) |
+| skills | `python, fastapi, postgresql, docker` vs `devops, fastapi, python` (taxonomy difference) | `[]` = `[]` |
+| budget_amount | `2500.0` = `2500.0` | `None` = `None` (bait suppressed in both) |
+| budget_currency | `USD` = `USD` | `None` = `None` |
+| duration | `3 weeks` = `3 weeks` | `None` = `None` |
+| remote | `True` = `True` | `True` = `True` |
+| risk_flags | `[]` = `[]` | provider added `implausible_rate`; the merged result carries all four flags (score 98) |
+
+**Agreement:** every safety-relevant field agreed. The provider contributed one extra risk signal (`implausible_rate`) that the deterministic rules missed, which is exactly the value of running both. The provider never produced a budget for the scam sample, and the deterministic merge suppressed it regardless.
 
 ---
 
@@ -200,8 +273,10 @@ Fixed in `app/services/extractor.py` by adding `AMOUNT_CURRENCY_PATTERN` and mer
 
 | Check | Result |
 |---|---|
-| `pytest -q` (bare `pytest` executable) | 174 passed |
-| `python -m pytest -q` | 174 passed |
+| `pytest -q` (bare `pytest` executable) | 180 passed |
+| `python -m pytest -q` | 180 passed |
 | `ruff check app tests migrations scripts` | all checks passed |
 | `python -m compileall -q app tests migrations scripts` | exit 0 |
+| Live NVIDIA provider | HTTP 200 on both samples, ~105 s latency per extraction |
+| Live service workflow | 54/54 smoke checks passed with NVIDIA active |
 | Architecture rewritten | No. Existing provider protocol, orchestrator, fallback, review, and publishing paths are untouched. |

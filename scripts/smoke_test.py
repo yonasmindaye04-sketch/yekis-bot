@@ -49,6 +49,13 @@ def load_keys_by_role() -> dict[str, str]:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Live functional smoke test")
     parser.add_argument("--base-url", default="http://127.0.0.1:8100")
+    parser.add_argument(
+        "--timeout",
+        type=float,
+        default=300.0,
+        help="HTTP timeout in seconds; raise it when the service extracts with a "
+        "slow provider (NVIDIA NIM can take ~2 minutes per request)",
+    )
     args = parser.parse_args()
     base = args.base_url.rstrip("/")
 
@@ -68,7 +75,7 @@ def main() -> int:
     tag = uuid.uuid4().hex[:8]
     source_url = f"https://t.me/smoke_test_{tag}"
 
-    with httpx.Client(base_url=base, timeout=60.0) as client:
+    with httpx.Client(base_url=base, timeout=args.timeout) as client:
         # --- public surface -------------------------------------------------
         response = client.get("/health")
         record(

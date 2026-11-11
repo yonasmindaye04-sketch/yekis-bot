@@ -399,6 +399,113 @@ def test_extraction_latency_is_measurable_without_a_network_call():
     assert elapsed_ms < 5000
 
 
+# --- Bounded retry for transient failures ---------------------------------
+
+
+def test_timeout_is_retried_once_then_succeeds():
+    calls = {"count": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["count"] += 1
+        if calls["count"] == 1:
+            raise httpx.ReadTimeout("cold start", request=request)
+        return httpx.Response(
+            200, json={"choices": [{"message": {"content": json.dumps(_payload())}}]}
+        )
+
+    waits: list[float] = []
+    provider = _nvidia_provider(handler=handler, max_attempts=2, retry_wait_seconds=5.0,
+                                sleep=waits.append)
+
+    result = provider.extract(JOB_POST)
+
+    assert result.budget_amount == 2500.0
+    assert calls["count"] == 2
+    assert waits == [5.0]
+
+
+def test_rate_limit_is_retried_then_succeeds():
+    calls = {"count": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["count"] += 1
+        if calls["count"] == 1:
+            return httpx.Response(429, headers={"retry-after": "2"})
+        return httpx.Response(
+            200, json={"choices": [{"message": {"content": json.dumps(_payload())}}]}
+        )
+
+    waits: list[float] = []
+    provider = _nvidia_provider(handler=handler, max_attempts=2, retry_wait_seconds=5.0,
+                                sleep=waits.append)
+
+    provider.extract(JOB_POST)
+
+    assert calls["count"] == 2
+    assert waits == [5.0]
+
+
+def test_transient_failure_exhausts_attempts_then_falls_back_to_rules():
+    calls = {"count": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["count"] += 1
+        raise httpx.ReadTimeout("still cold", request=request)
+
+    waits: list[float] = []
+    provider = _nvidia_provider(handler=handler, max_attempts=3, retry_wait_seconds=2.0,
+                                sleep=waits.append)
+
+    result, method = extract_with_provider(JOB_POST, provider=provider)
+
+    assert method == "rules_fallback"
+    assert calls["count"] == 3
+    assert waits == [2.0, 4.0]
+
+
+def test_credential_and_schema_failures_are_not_retried():
+    calls = {"count": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["count"] += 1
+        return httpx.Response(401, json={"detail": "invalid key"})
+
+    waits: list[float] = []
+    provider = _nvidia_provider(handler=handler, max_attempts=3, retry_wait_seconds=1.0,
+                                sleep=waits.append)
+
+    with pytest.raises(ProviderAuthError):
+        provider.extract(JOB_POST)
+
+    assert calls["count"] == 1, "a bad credential must not be retried"
+    assert waits == []
+
+
+def test_provider_skills_are_normalised_to_lowercase():
+    provider = _nvidia_provider(
+        content=json.dumps(_payload(skills=["Python", "FastAPI", "Python", "  PostgreSQL  "]))
+    )
+    result = provider.extract(JOB_POST)
+
+    assert result.skills == ["python", "fastapi", "postgresql"]
+
+
+def test_settings_enable_bounded_retries():
+    settings = Settings(
+        database_url="sqlite+pysqlite:///:memory:",
+        extraction_provider="llm",
+        llm_api_key="nvapi-test-key-not-real",
+        llm_base_url=NVIDIA_BASE_URL,
+        llm_model=NVIDIA_MODEL,
+        llm_max_attempts=3,
+        llm_retry_wait_seconds=2.0,
+    )
+    provider = get_provider(settings)
+
+    assert provider._max_attempts == 3
+    assert provider._retry_wait_seconds == 2.0
+
+
 # --- Live verification script (offline logic) ------------------------------
 
 

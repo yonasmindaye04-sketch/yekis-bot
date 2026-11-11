@@ -53,6 +53,11 @@ class Settings(BaseSettings):
     gemini_base_url: str = "https://generativelanguage.googleapis.com/v1beta"
     gemini_model: str = "gemini-2.5-flash"
     llm_timeout_seconds: float = 30.0
+    # Provider-level retry for transient failures (timeout, 429, 5xx). NVIDIA
+    # NIM cold starts can exceed a single request timeout, so one bounded
+    # retry is enabled by default. Schema/credential failures are not retried.
+    llm_max_attempts: int = 2
+    llm_retry_wait_seconds: float = 5.0
     llm_max_input_chars: int = 12000
     llm_max_output_tokens: int = 800
     # "json_object" asks the provider for JSON mode. Some OpenAI-compatible

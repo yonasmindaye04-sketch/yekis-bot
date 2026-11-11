@@ -52,13 +52,17 @@ class LLMOpportunity(BaseModel):
     @field_validator("skills")
     @classmethod
     def unique_skills(cls, value: list[str]) -> list[str]:
+        """Normalise skill casing so analytics do not split "Python"/"python".
+
+        The rules extractor already emits lowercase canonical terms, so
+        provider output is normalised to the same form.
+        """
         seen: set[str] = set()
         result: list[str] = []
         for skill in value:
-            normalized = " ".join(skill.split())
-            key = normalized.casefold()
-            if normalized and key not in seen:
-                seen.add(key)
+            normalized = " ".join(skill.split()).lower()
+            if normalized and normalized not in seen:
+                seen.add(normalized)
                 result.append(normalized)
         return result
 

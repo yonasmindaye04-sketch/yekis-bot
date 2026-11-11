@@ -152,10 +152,15 @@ NVIDIA NIM speaks the OpenAI chat-completions protocol, so it uses the existing 
 EXTRACTION_PROVIDER=llm
 LLM_API_KEY=your_nvidia_api_key
 LLM_BASE_URL=https://integrate.api.nvidia.com/v1
-LLM_MODEL=meta/llama-3.3-70b-instruct   # exact model id from build.nvidia.com
+LLM_MODEL=minimaxai/minimax-m3.1-flash   # exact model id from build.nvidia.com
+LLM_TIMEOUT_SECONDS=180
+LLM_MAX_ATTEMPTS=2
+LLM_RETRY_WAIT_SECONDS=5
 ```
 
 Keep the key in `.env` only; never paste it into chat or commit it.
+
+**Measured latency:** NVIDIA NIM cold starts measured ~105 s per extraction for this model. The default 30 s timeout was too short and every request fell back to rules. `LLM_TIMEOUT_SECONDS=180` plus one bounded retry (`LLM_MAX_ATTEMPTS`) fixes it. Because extraction runs synchronously inside `POST /api/v1/ingestion/manual`, that request now takes ~1.5–2 minutes; **use the Celery collector/worker path for bulk ingestion**.
 
 Two compatibility switches exist for NIM deployments whose model does not accept JSON mode or that need guided decoding:
 
@@ -164,7 +169,7 @@ LLM_RESPONSE_FORMAT=json_object   # use "none" to omit the parameter
 LLM_EXTRA_BODY={"guided_json":{"type":"object"}}   # optional provider-specific fields
 ```
 
-Provider failures are typed and secret-free: `401/403` (auth), `429` (rate limit, includes `retry-after`), `5xx` and timeouts (unavailable). All of them fall back to rules extraction.
+Provider failures are typed and secret-free: `401/403` (auth), `429` (rate limit, includes `retry-after`), `5xx` and timeouts (unavailable). Timeouts, `429`, and `5xx` are retried within the provider; credential and schema failures are not. Everything still falls back to rules extraction.
 
 Live verification (requires a locally configured NVIDIA key):
 

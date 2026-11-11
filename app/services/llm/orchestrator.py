@@ -64,6 +64,8 @@ def get_provider(settings: Settings | None = None) -> ExtractionProvider:
             max_output_tokens=settings.llm_max_output_tokens,
             response_format=settings.llm_response_format,
             extra_body=parse_extra_body(settings.llm_extra_body),
+            max_attempts=settings.llm_max_attempts,
+            retry_wait_seconds=settings.llm_retry_wait_seconds,
         )
     if provider == "gemini":
         if not settings.gemini_api_key:

@@ -68,11 +68,17 @@ NVIDIA NIM is reached through the same OpenAI-compatible adapter; no separate pr
 EXTRACTION_PROVIDER=llm
 LLM_API_KEY=<your NVIDIA API key>
 LLM_BASE_URL=https://integrate.api.nvidia.com/v1
-LLM_MODEL=meta/llama-3.3-70b-instruct
+LLM_MODEL=minimaxai/minimax-m3.1-flash
+LLM_TIMEOUT_SECONDS=180
+LLM_MAX_ATTEMPTS=2
+LLM_RETRY_WAIT_SECONDS=5
 ```
 
 - Get the key from NVIDIA Build. Store it only in `.env` or a secret manager; never commit it or paste it into a ticket or chat.
 - `LLM_MODEL` must be the exact model id enabled for that key.
+- **Latency:** NIM cold starts measured ~105 s per extraction with `minimaxai/minimax-m3.1-flash`. Keep `LLM_TIMEOUT_SECONDS` at 180 or higher, or requests will fall back to rules.
+- **Bulk ingestion:** extraction runs synchronously inside the request, so `POST /api/v1/ingestion/manual` blocks for that long. Use the Celery collector/worker path for batch work.
+- After changing `.env`, recreate the containers so they pick it up: `docker compose up -d --force-recreate api worker beat`.
 - If a deployment rejects JSON mode, set `LLM_RESPONSE_FORMAT=none`; the strict Pydantic validation still applies to the returned JSON.
 - For guided decoding, set `LLM_EXTRA_BODY` to a JSON object, for example `{"guided_json":{"type":"object"}}`.
 - HTTP failures are typed: `401/403` credential, `429` rate limit (with `retry-after`), `5xx`/timeout unavailable. All fall back to rules extraction, so a provider outage never loses a post.

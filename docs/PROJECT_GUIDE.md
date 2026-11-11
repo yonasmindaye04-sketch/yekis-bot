@@ -485,7 +485,9 @@ Startup behavior:
 | `LLM_MODEL` | `gpt-4o-mini` | OpenAI-compatible model name; use the exact NVIDIA model id. |
 | `LLM_RESPONSE_FORMAT` | `json_object` | JSON mode. Set `none` for deployments that reject the parameter. |
 | `LLM_EXTRA_BODY` | empty | Optional JSON object of provider-specific request fields, e.g. NVIDIA guided decoding. |
-| `LLM_TIMEOUT_SECONDS` | `30` | Outbound request timeout for both providers. |
+| `LLM_TIMEOUT_SECONDS` | `30` | Outbound request timeout for both providers. NVIDIA NIM measured ~105 s per extraction, so use `180`. |
+| `LLM_MAX_ATTEMPTS` | `2` | Bounded provider-level retry for transient failures (timeout, `429`, `5xx`). Credential and schema failures are never retried. |
+| `LLM_RETRY_WAIT_SECONDS` | `5` | Base wait between provider retries (multiplied by the attempt number). |
 | `LLM_MAX_INPUT_CHARS` | `12000` | Input truncation limit for both providers. |
 | `LLM_MAX_OUTPUT_TOKENS` | `800` | Response token cap for both providers. |
 

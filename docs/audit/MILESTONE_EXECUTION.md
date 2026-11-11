@@ -542,3 +542,35 @@ NVIDIA NIM was integrated through the **existing** OpenAI-compatible provider ar
 | 5 | Live NVIDIA request | **NOT RUN** — no NVIDIA key is configured locally and outbound LLM calls are blocked in this environment |
 
 Full detail, the deterministic baseline, and the live-run procedure are in `NVIDIA_NIM_VERIFICATION.md`.
+
+---
+
+## NVIDIA NIM live verification (follow-up)
+
+The NVIDIA NIM integration was verified live and the complete workflow was exercised against the running stack.
+
+**Live provider run**
+
+| Item | Value |
+|---|---|
+| Date (UTC) | 2026-11-11T17:41:20 |
+| Endpoint | `POST https://integrate.api.nvidia.com/v1/chat/completions` |
+| Model id | `minimaxai/minimax-m3.1-flash` |
+| HTTP status | `200` on both samples |
+| Latency | 105,099 ms and 104,245 ms |
+
+**Defects found and fixed during live verification**
+
+1. **30 s timeout was too short.** Every live request timed out and silently fell back to rules. Diagnosis: `GET /v1/models` returned `200` in ~1,080 ms from inside the container, so egress was healthy; NIM cold starts for this model simply take ~105 s. Fixed with `LLM_TIMEOUT_SECONDS=180` and a bounded provider-level retry (`LLM_MAX_ATTEMPTS=2`, `LLM_RETRY_WAIT_SECONDS=5`) for transient failures only (timeout, 429, 5xx). Credential and schema failures are never retried.
+2. **The Gemini fallback was silently broken.** The service was still on `EXTRACTION_PROVIDER=gemini` and `gemini-2.5-flash` returns `404` for the configured AI Studio key. The rules fallback hid the misconfiguration completely. The Gemini adapter now reports a 404 as "model not available for this API key".
+3. **Provider skill casing was inconsistent.** The model returned `Python`/`FastAPI` while the rules extractor emits lowercase, which would split analytics demand entries. Provider skills are now normalised to lowercase.
+
+**Live service verification**
+
+| Check | Result |
+|---|---|
+| `scripts/verify_nvidia_live.py` | verified, HTTP 200 both samples |
+| `scripts/verify_extraction_provider.py` | `extraction_method=llm` for both samples; budget `2500.0 USD`; scam sample budget suppressed; 4 risk flags; score 98 |
+| `scripts/smoke_test.py` (live stack, NVIDIA active) | **54/54 passed** |
+
+Full detail: `NVIDIA_NIM_VERIFICATION.md`.

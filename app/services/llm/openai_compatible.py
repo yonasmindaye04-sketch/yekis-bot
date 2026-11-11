@@ -17,6 +17,8 @@ Compatibility knobs (all optional, none change the extraction architecture):
 
 from __future__ import annotations
 
+import time
+from collections.abc import Callable
 from typing import Any
 
 import httpx
@@ -48,6 +50,9 @@ class OpenAICompatibleProvider:
         max_output_tokens: int = 800,
         response_format: str = "json_object",
         extra_body: dict[str, Any] | None = None,
+        max_attempts: int = 1,
+        retry_wait_seconds: float = 5.0,
+        sleep: Callable[[float], None] = time.sleep,
         client: httpx.Client | None = None,
     ) -> None:
         if not api_key:
@@ -64,6 +69,9 @@ class OpenAICompatibleProvider:
         self._max_output_tokens = max_output_tokens
         self._response_format = response_format
         self._extra_body = dict(extra_body or {})
+        self._max_attempts = max(1, max_attempts)
+        self._retry_wait_seconds = max(0.0, retry_wait_seconds)
+        self._sleep = sleep
         self._client = client or httpx.Client(timeout=timeout_seconds)
 
     def __repr__(self) -> str:
@@ -113,6 +121,25 @@ class OpenAICompatibleProvider:
         raise ProviderError(f"LLM request failed with status {status}")
 
     def extract(self, text: str) -> ExtractedOpportunity:
+        """Extract with bounded retries for transient provider failures.
+
+        Timeouts, rate limits, and 5xx responses are retried (NVIDIA NIM cold
+        starts routinely exceed a single request timeout). Credential and
+        schema failures are not retried: they are deterministic and the
+        caller falls back to rules extraction instead.
+        """
+        last_error: ProviderError | None = None
+        for attempt in range(1, self._max_attempts + 1):
+            try:
+                return self._extract_once(text)
+            except (ProviderRateLimitError, ProviderUnavailableError) as exc:
+                last_error = exc
+                if attempt >= self._max_attempts:
+                    raise
+                self._sleep(self._retry_wait_seconds * attempt)
+        raise last_error or ProviderError("LLM request failed")
+
+    def _extract_once(self, text: str) -> ExtractedOpportunity:
         try:
             response = self._client.post(
                 f"{self._base_url}/chat/completions",

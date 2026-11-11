@@ -60,6 +60,13 @@ def main(argv: list[str] | None = None) -> int:
         choices=["llm", "gemini", "rules", "rules_fallback"],
         help="Extraction method the service should have recorded",
     )
+    parser.add_argument(
+        "--timeout",
+        type=float,
+        default=420.0,
+        help="HTTP timeout in seconds; must exceed the provider timeout because "
+        "extraction runs synchronously inside the request",
+    )
     args = parser.parse_args(argv)
 
     keys = load_keys_by_role()
@@ -72,7 +79,7 @@ def main(argv: list[str] | None = None) -> int:
     base = args.base_url.rstrip("/")
     headers = {"X-API-Key": key, "Content-Type": "application/json"}
 
-    with httpx.Client(base_url=base, timeout=120.0) as client:
+    with httpx.Client(base_url=base, timeout=args.timeout) as client:
         response = client.post(
             "/api/v1/sources",
             headers=headers,
