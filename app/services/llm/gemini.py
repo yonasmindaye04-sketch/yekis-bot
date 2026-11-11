@@ -94,6 +94,11 @@ class GeminiProvider:
             ) from exc
 
         if response.status_code >= 400:
+            if response.status_code == 404:
+                raise ProviderError(
+                    "Gemini returned 404: the model is not available for this API key. "
+                    "Check GEMINI_MODEL against the models enabled in AI Studio."
+                )
             raise ProviderError(f"Gemini request failed with status {response.status_code}")
 
         try:
