@@ -79,8 +79,40 @@ class TelethonPublisher:
         return self._client
 
     async def send_message(self, channel: str, text: str) -> MessageRef:
+        reference = channel_reference(channel)
+        # 1. Prefer standard Telegram Bot HTTP API when bot token is configured
+        # This is serverless-friendly (Vercel, AWS Lambda) and avoids MTProto session disk locks.
+        if self._settings.telegram_bot_token:
+            import httpx
+
+            url = f"https://api.telegram.org/bot{self._settings.telegram_bot_token}/sendMessage"
+            payload = {
+                "chat_id": reference,
+                "text": text,
+                "parse_mode": "Markdown",
+                "disable_web_page_preview": True,
+            }
+            try:
+                async with httpx.AsyncClient(timeout=15.0) as http_client:
+                    response = await http_client.post(url, json=payload)
+                    data = response.json()
+                    # Retry without Markdown parse mode if formatting fails
+                    if not data.get("ok") and "can't parse" in data.get("description", "").lower():
+                        payload.pop("parse_mode", None)
+                        response = await http_client.post(url, json=payload)
+                        data = response.json()
+                    if not data.get("ok"):
+                        err_desc = data.get("description", "Unknown Telegram API error")
+                        raise PublisherError(f"telegram api error: {err_desc}")
+                    msg_id = str(data["result"]["message_id"])
+                    return MessageRef(external_message_id=msg_id)
+            except PublisherError:
+                raise
+            except Exception as exc:  # noqa: BLE001
+                raise PublisherError(f"telegram send failed: {type(exc).__name__}: {exc}") from exc
+
+        # 2. Fallback to Telethon MTProto client for user session publishing
         try:
-            reference = channel_reference(channel)
             client = await self._ensure_client()
             entity = await client.get_entity(reference)
             message = await client.send_message(entity, text, link_preview=False)
