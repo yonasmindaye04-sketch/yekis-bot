@@ -1,3 +1,4 @@
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -41,6 +42,14 @@ class Settings(BaseSettings):
     telegram_proxy_host: str = ""
     telegram_proxy_port: int = 0
     telegram_proxy_rdns: bool = True
+
+    @field_validator("telegram_proxy_port", mode="before")
+    @classmethod
+    def _blank_port_is_zero(cls, value):
+        """An empty value means "no port"; it must not break startup."""
+        if value is None or (isinstance(value, str) and not value.strip()):
+            return 0
+        return value
 
     # Background processing (M2).
     redis_url: str = "redis://localhost:6382/0"

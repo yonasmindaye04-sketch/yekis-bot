@@ -341,7 +341,35 @@ Common Cloudflare options:
 | Setup | Proxy settings | Notes |
 |---|---|---|
 | **Cloudflare WARP** in proxy mode | `socks5` / `127.0.0.1` / `40000` | Simplest for local development. WARP's local SOCKS5 listener changes the egress IP for Telegram. |
-| **Cloudflare Tunnel** (`cloudflared`) in front of a SOCKS5 endpoint | `socks5` / `<tunnel host>` / `
+| **Cloudflare Tunnel** (`cloudflared`) in front of a SOCKS5 endpoint | `socks5` / `<tunnel host>` / `<tunnel port>` | Same settings. |
+
+The proxy is applied to the collector client, the publisher, and the login command, so all three paths behave identically.
+
+**Host versus container.** Inside a container, `127.0.0.1` is the container itself, not your machine. The Compose services therefore override the proxy host with `host.docker.internal`, which Docker Desktop resolves to the host:
+
+```yaml
+# docker-compose.yml (api, worker, beat)
+environment:
+  TELEGRAM_PROXY_HOST: ${TELEGRAM_PROXY_HOST_CONTAINER:-host.docker.internal}
+```
+
+- Host CLI (`python -m app.integrations.telegram.collector`): keep `TELEGRAM_PROXY_HOST=127.0.0.1`.
+- Containers: `host.docker.internal` by default; override with `TELEGRAM_PROXY_HOST_CONTAINER` in `.env` if your tunnel lives elsewhere.
+
+Verify the proxy is listening before blaming the service:
+
+```bash
+# WARP proxy mode
+python -c "import socket;s=socket.create_connection(('127.0.0.1',40000),3);print('proxy reachable')"
+```
+
+After changing the proxy settings, recreate the containers so they inherit them:
+
+```bash
+docker compose up -d --force-recreate api worker beat
+```
+
+### Check source health
 
 ```bash
 curl -s http://localhost:8100/api/v1/sources -H "X-API-Key: $YI_ADMIN_KEY"

@@ -32,6 +32,7 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgresql+psycopg://yekis_intel:yekis_intel_dev@db:5432/yekis_intelligence
+      TELEGRAM_PROXY_HOST: ${TELEGRAM_PROXY_HOST_CONTAINER:-host.docker.internal}
     ports:
       - "8100:8000"
     depends_on:
@@ -46,6 +47,7 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://yekis_intel:yekis_intel_dev@db:5432/yekis_intelligence
       REDIS_URL: redis://redis:6379/0
+      TELEGRAM_PROXY_HOST: ${TELEGRAM_PROXY_HOST_CONTAINER:-host.docker.internal}
     command: celery -A app.worker.celery_app:celery_app worker --loglevel=INFO --concurrency=1
     depends_on:
       db:
@@ -59,6 +61,7 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://yekis_intel:yekis_intel_dev@db:5432/yekis_intelligence
       REDIS_URL: redis://redis:6379/0
+      TELEGRAM_PROXY_HOST: ${TELEGRAM_PROXY_HOST_CONTAINER:-host.docker.internal}
     command: celery -A app.worker.celery_app:celery_app beat --loglevel=INFO
     depends_on:
       db:

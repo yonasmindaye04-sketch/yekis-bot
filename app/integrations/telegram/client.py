@@ -77,10 +77,14 @@ class TelethonClient:
         entity = await client.get_entity(reference)
         username = getattr(entity, "username", None) or reference
         collected: list[ChannelMessage] = []
+        # Media-only posts carry no text and are skipped, so request a larger
+        # window than the caller asked for. Otherwise a small limit can be
+        # consumed entirely by empty posts and yield nothing.
+        window = max(limit * 3, limit + 20)
         # reverse=True keeps oldest-first so checkpoints move monotonically.
         try:
             async for message in client.iter_messages(
-                entity, min_id=min_id, limit=limit, reverse=True
+                entity, min_id=min_id, limit=window, reverse=True
             ):
                 text = (message.message or "").strip()
                 if not text:
@@ -93,6 +97,8 @@ class TelethonClient:
                         posted_at=message.date,
                     )
                 )
+                if len(collected) >= limit:
+                    break
         except Exception as exc:  # noqa: BLE001 - normalized for the operator
             if type(exc).__name__ == "BotMethodInvalidError":
                 raise TelegramBotCannotReadHistory(

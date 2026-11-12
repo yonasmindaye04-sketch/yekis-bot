@@ -146,4 +146,56 @@ TELEGRAM_PROXY_RDNS=true
 | Setup | Settings | Notes |
 |---|---|---|
 | Cloudflare WARP in proxy mode | `socks5` / `127.0.0.1` / `40000` | Simplest local option; changes the egress IP for Telegram. |
-| Cloudflare Tunnel (`cloudflared`) in front of a SOCKS5 endpoint | `socks5` / `
+| Cloudflare Tunnel (`cloudflared`) in front of a SOCKS5 endpoint | `socks5` / `<tunnel host>` / `<tunnel port>` | Same settings. |
+
+Enforcement: `tests/test_telegram_proxy.py` (6 checks) covers the settings mapping, an invalid proxy type, an incomplete configuration being ignored, and the proxy being forwarded to Telethon by both the collector client and the publisher.
+
+**Proxy status at the time of this report:** the WARP proxy was not listening on the common ports (40000, 40001, 1080, 7890, 7897, 8118), so the live collection was performed over the direct connection, which works from this host.
+
+**Note:** the sibling Yekis project's Telegram integration could not be inspected from this environment (the directory is outside the authorized project scope). The implementation above follows the standard Telethon proxy contract. If that project uses a different mechanism — for example a Cloudflare Worker relay, a custom MTProto transport, or a fixed proxy host — paste the relevant snippet and the code will be aligned to it.
+
+---
+
+## Live collection verified (2026-11-12)
+
+With the user session authorized as `yona64`, a real collection ran end to end against the public channel `https://t.me/telegram`:
+
+| Step | Result |
+|---|---|
+| Connect | `authorized: True`; entity resolved as `Telegram News @telegram` |
+| Read history | 3 messages read from the channel |
+| Collect (run 1) | `fetched=1 ingested=1 duplicates=0 last_id=3`; NVIDIA extraction returned `HTTP/1.1 200 OK` |
+| Collect (run 2) | `fetched=1 ingested=1 last_id=5`; checkpoint advanced, no duplicate rows |
+| Replay (checkpoint rewound to 0) | `fetched=2 ingested=0 duplicates=2 last_id=5`; database still held exactly **2 posts and 2 opportunities** |
+
+**Live duplicate prevention is proven**: re-delivering already-ingested messages produced zero new rows.
+
+### Two defects found and fixed by the live run
+
+1. **Missing proxy transport.** With `TELEGRAM_PROXY_*` configured, Telethon failed with `ModuleNotFoundError: No module named 'socks'` — the `python-socks[asyncio]` dependency was absent, so a configured proxy could not be used at all. Added to `pyproject.toml` and installed.
+
+2. **Empty messages consumed the fetch limit.** Media-only posts carry no text and are skipped, but they still counted against the requested limit, so `--limit 1` returned nothing when the oldest posts were empty. The client now requests a larger window and stops once it has the requested number of text messages. Covered by `tests/test_telegram_client_fetch.py` (4 checks).
+
+Also hardened: an empty `TELEGRAM_PROXY_PORT` value no longer crashes the application at import (it is treated as "no port").
+
+### Container networking
+
+Inside a container, `127.0.0.1` is the container itself, so a host-local proxy must be reached as `host.docker.internal`. Compose now overrides the proxy host for `api`, `worker`, and `beat`:
+
+```yaml
+TELEGRAM_PROXY_HOST: ${TELEGRAM_PROXY_HOST_CONTAINER:-host.docker.internal}
+```
+
+| Context | Proxy host |
+|---|---|
+| Host CLI | `127.0.0.1` (from `.env`) |
+| Containers | `host.docker.internal` (from Compose) |
+
+### Enabling the proxy
+
+Start Cloudflare WARP in proxy mode (SOCKS5 on `127.0.0.1:40000`), then recreate the containers so they inherit it:
+
+```bash
+docker compose up -d --force-recreate api worker beat
+python -m app.integrations.telegram.collector --source-id SOURCE_ID --limit 5
+```
