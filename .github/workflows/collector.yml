@@ -55,7 +55,7 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_SESSION_PATH: "var/telegram_user"
           TELEGRAM_FETCH_LIMIT: "15"
-          ADMIN_ALERT_CHAT_ID: ${{ secrets.ADMIN_ALERT_CHAT_ID }}
+          ADMIN_ALERTS_ENABLED: "false"
           EXTRACTION_PROVIDER: ${{ secrets.EXTRACTION_PROVIDER }}
           LLM_API_BASE: ${{ secrets.LLM_API_BASE }}
           LLM_MODEL: ${{ secrets.LLM_MODEL }}
