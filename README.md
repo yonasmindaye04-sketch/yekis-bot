@@ -1,3 +1,13 @@
+---
+title: Yekis Intelligence
+emoji: Y
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # Yekis Intelligence
 
 Independent intelligence service for the Yekis marketplace: FastAPI, PostgreSQL, source management, Telegram collection, background processing, rule/LLM extraction, an audit-trailed review queue, approval-gated publishing, analytics, and an authenticated admin dashboard.
