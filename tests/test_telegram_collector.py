@@ -7,6 +7,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from sqlalchemy import func, select
 
+from app.config import settings
 from app.integrations.telegram.base import ChannelMessage
 from app.integrations.telegram.channel import InvalidChannelReference, channel_reference
 from app.integrations.telegram.client import (
@@ -57,9 +58,10 @@ def test_collects_new_messages_once_across_two_runs(db_session, source):
     assert second.status == "collected"
     assert second.fetched == 0
     assert second.ingested == 0
+    expected_limit = settings.telegram_fetch_limit
     assert fake.calls == [
-        (source.source_url, 0, 100),
-        (source.source_url, 2, 100),
+        (source.source_url, 0, expected_limit),
+        (source.source_url, 2, expected_limit),
     ]
 
     assert db_session.scalar(select(func.count()).select_from(CollectedPost)) == 2

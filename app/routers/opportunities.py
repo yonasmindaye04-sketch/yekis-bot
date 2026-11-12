@@ -61,6 +61,25 @@ def list_opportunities(
 
 
 @router.get(
+    "/export",
+    dependencies=[Depends(require_role(*READ_ROLES))],
+)
+def export_opportunities(
+    status: str | None = Query(default="approved"),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    db: Session = Depends(get_db),
+):
+    from app.services.marketplace_sync import serialize_opportunity_for_marketplace
+
+    statement = select(Opportunity).order_by(Opportunity.id.desc())
+    if status:
+        statement = statement.where(Opportunity.review_status == status)
+    opportunities = list(db.scalars(statement.limit(limit).offset(offset)).all())
+    return [serialize_opportunity_for_marketplace(opp) for opp in opportunities]
+
+
+@router.get(
     "/{opportunity_id}",
     response_model=OpportunityRead,
     dependencies=[Depends(require_role(*READ_ROLES))],
@@ -141,6 +160,15 @@ async def publish_endpoint(
             settings=settings,
             scheduled_at=payload.scheduled_at,
         )
+        if publication.status == "published":
+            try:
+                from app.services.marketplace_sync import dispatch_to_marketplace
+
+                opp = db.get(Opportunity, opportunity_id)
+                if opp:
+                    dispatch_to_marketplace(opp, settings)
+            except Exception:  # noqa: BLE001
+                pass
     except PublishingError as exc:
         raise HTTPException(
             status_code=exc.status_code,

@@ -92,6 +92,15 @@ class Settings(BaseSettings):
     publishing_max_attempts: int = 3
     platform_url: str = "https://yekis.com"
 
+    # Admin Alerts
+    admin_alerts_enabled: bool = False
+    admin_alert_chat_id: str = ""
+
+    # Marketplace Sync & Webhook
+    marketplace_sync_enabled: bool = False
+    marketplace_webhook_url: str = ""
+    marketplace_webhook_secret: str = ""
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     @property
