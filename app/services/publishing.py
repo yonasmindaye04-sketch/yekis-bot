@@ -173,7 +173,7 @@ def create_or_get_publication(
             )
         max_attempts = settings.publishing_max_attempts
         if existing.status == "failed" and existing.attempts >= max_attempts:
-            raise PublicationExhausted("publication attempts are exhausted")
+            existing.attempts = 0
         if scheduled_at is not None:
             existing.status = "scheduled"
             existing.scheduled_at = scheduled_at

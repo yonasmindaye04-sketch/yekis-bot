@@ -129,10 +129,4 @@ def ingest_post(
         raise
 
     db.refresh(opportunity)
-    try:
-        from app.config import settings
-        from app.services.alerts import send_opportunity_alert
-        send_opportunity_alert(opportunity, settings)
-    except Exception:  # noqa: BLE001
-        pass
     return opportunity, True
