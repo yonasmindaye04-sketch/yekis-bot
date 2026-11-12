@@ -97,6 +97,19 @@ def test_field_edit_is_recorded_with_before_and_after(client, reviewer_client):
     assert event["changes"]["budget_amount"]["to"] == 450.0
 
 
+def test_field_edit_client_name(client, reviewer_client):
+    opportunity = _seed(client, "edit-client-1")
+    response = reviewer_client.patch(
+        f"/api/v1/opportunities/{opportunity['id']}",
+        json={"client_name": "International Livestock Research Institute (ILRI)"},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["client_name"] == "International Livestock Research Institute (ILRI)"
+
+    read = client.get(f"/api/v1/opportunities/{opportunity['id']}").json()
+    assert read["client_name"] == "International Livestock Research Institute (ILRI)"
+
+
 def test_field_edit_with_no_changes_does_not_create_an_event(client, reviewer_client):
     opportunity = _seed(client)
     response = reviewer_client.patch(

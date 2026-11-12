@@ -29,6 +29,14 @@ async def lifespan(app: FastAPI):
     validate_security_config(settings)
     if settings.auto_create_schema and IS_DEVELOPMENT:
         Base.metadata.create_all(bind=engine)
+    try:
+        from sqlalchemy import text
+        with engine.begin() as conn:
+            conn.execute(
+                text("ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS client_name VARCHAR(250);")
+            )
+    except Exception:
+        pass
     yield
 
 

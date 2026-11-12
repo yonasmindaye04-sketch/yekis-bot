@@ -66,6 +66,7 @@ class Opportunity(Base):
     collected_post_id: Mapped[int] = mapped_column(ForeignKey("collected_posts.id"), unique=True)
     opportunity_type: Mapped[str] = mapped_column(String(40), default="other")
     title: Mapped[str] = mapped_column(String(250), nullable=False)
+    client_name: Mapped[str | None] = mapped_column(String(250), nullable=True)
     category: Mapped[str | None] = mapped_column(String(100))
     skills: Mapped[list] = mapped_column(JSON, default=list)
     budget_amount: Mapped[float | None] = mapped_column(Float)

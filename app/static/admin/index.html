@@ -999,6 +999,10 @@
             <input id="title-${id}" value="${esc(item.title)}">
           </div>
           <div>
+            <label>Client / Organization</label>
+            <input id="client-${id}" maxlength="250" placeholder="e.g. ILRI, Addis Software…" value="${esc(item.client_name || "")}">
+          </div>
+          <div>
             <label>Category</label>
             <input id="category-${id}" value="${esc(item.category || "")}">
           </div>
@@ -1095,6 +1099,7 @@
       const amountVal = $(`budget-${id}`).value;
       const payload = {
         title: $(`title-${id}`).value,
+        client_name: $(`client-${id}`) ? $(`client-${id}`).value || null : null,
         category: $(`category-${id}`).value || null,
         duration: $(`duration-${id}`).value || null,
         budget_amount: amountVal === "" ? null : Number(amountVal),
@@ -1143,6 +1148,9 @@
       const details = [];
       if (item.opportunity_type && item.opportunity_type.toLowerCase() !== "other") {
         details.push(`• Type: ${item.opportunity_type.replace(/_/g, " ")}`);
+      }
+      if (item.client_name && item.client_name.trim()) {
+        details.push(`• Client: ${item.client_name.trim()}`);
       }
       if (item.category && item.category.toLowerCase() !== "other") {
         details.push(`• Category: ${item.category}`);

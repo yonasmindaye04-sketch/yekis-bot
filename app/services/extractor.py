@@ -112,6 +112,7 @@ class ExtractedOpportunity:
     quality_score: int
     risk_flags: list[str] = field(default_factory=list)
     risk_score: int = 0
+    client_name: str | None = None
 
 
 def _term_matches(text: str, term: str) -> bool:
@@ -189,9 +190,25 @@ def _classify_type(lower: str) -> str:
     return "other"
 
 
+def _extract_client_name(text: str) -> str | None:
+    """Extract organization, company, employer, or client name from text."""
+    pattern = re.compile(
+        r"(?:(?:Hiring\s+)?Organization|Company|Employer|Client|Institution):\s*\n?\s*([^\n\r*#]+)",
+        re.IGNORECASE,
+    )
+    match = pattern.search(text)
+    if match:
+        name = match.group(1).strip()
+        name = re.sub(r"^[^\w(]+|[^\w)]+$", "", name).strip()
+        if 2 <= len(name) <= 250:
+            return name
+    return None
+
+
 def extract_opportunity(text: str) -> ExtractedOpportunity:
     lower = text.lower()
     opportunity_type = _classify_type(lower)
+    client_name = _extract_client_name(text)
 
     skills = sorted(
         name for name, variants in SKILL_TERMS.items()
@@ -239,6 +256,7 @@ def extract_opportunity(text: str) -> ExtractedOpportunity:
     return ExtractedOpportunity(
         opportunity_type=opportunity_type,
         title=title,
+        client_name=client_name,
         category=category,
         skills=skills,
         budget_amount=budget_amount,

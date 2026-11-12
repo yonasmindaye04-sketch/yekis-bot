@@ -70,6 +70,9 @@ def format_publication(
     details: list[str] = []
     if opportunity.opportunity_type and opportunity.opportunity_type.lower() != "other":
         details.append(f"Type: {opportunity.opportunity_type.replace('_', ' ').title()}")
+    client = getattr(opportunity, "client_name", None)
+    if client and client.strip():
+        details.append(f"Client: {client.strip()}")
     if opportunity.category and opportunity.category.lower() != "other":
         details.append(f"Category: {opportunity.category.title()}")
     if budget := _budget(opportunity):

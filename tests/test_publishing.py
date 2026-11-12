@@ -333,3 +333,12 @@ def test_formatting_within_length_bounds(db_session, source):
     assert "APPLY ON YEKIS" in text
     assert "https://yekis.com" in text
     assert "Source:" not in text
+
+
+def test_format_publication_includes_client_name(db_session, source):
+    opportunity = _approved(db_session, source, "client-test-1", client_name="ILRI Ethiopia")
+    text = format_publication(opportunity, source)
+    assert "• Client: ILRI Ethiopia" in text
+    assert "• Type: Freelance Job" in text
+    assert "APPLY ON YEKIS" in text
+    assert "https://yekis.com" in text

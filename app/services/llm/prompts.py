@@ -9,6 +9,7 @@ Required JSON shape:
   "opportunity_type": "freelance_job" | "internship" | "scholarship" |
                      "training" | "resource" | "news" | "other",
   "title": string (1..250),
+  "client_name": string (1..250) | null,
   "category": "software" | "design" | "marketing" | "media" | "writing" |
               "data" | "admin" | "other" | null,
   "skills": string[] (max 20, each max 60),

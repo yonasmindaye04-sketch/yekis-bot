@@ -52,6 +52,7 @@ class OpportunityRead(BaseModel):
     collected_post_id: int
     opportunity_type: str
     title: str
+    client_name: str | None = None
     category: str | None
     skills: list
     budget_amount: float | None
@@ -70,11 +71,35 @@ class OpportunityRead(BaseModel):
     original_text: str | None = None
     original_url: str | None = None
     external_id: str | None = None
+    # --- Classification engine ---
+    classification: str = "insufficient_information"
+    engagement_type: str | None = None
+    is_genuine_opportunity: bool = False
+    is_publishable: bool = False
+    classification_confidence: float = 0.0
+    classification_evidence: list = []
+    classification_reasons: list = []
+    classification_method: str = "deterministic"
+    classifier_version: str | None = None
+    model_provider: str | None = None
+    model_name: str | None = None
+    risk_level: str = "none"
+    risk_assessment: dict = {}
+    # --- Approval record ---
+    approval_method: str | None = None
+    approval_reason: str | None = None
+    approved_at: datetime | None = None
+    approved_by: str | None = None
+    quarantined: bool = False
+    # --- Extracted engagement details ---
+    deadline: str | None = None
+    application_url: str | None = None
     model_config = ConfigDict(from_attributes=True)
 
 
 class OpportunityUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=250)
+    client_name: str | None = Field(default=None, max_length=250)
     category: str | None = Field(default=None, max_length=100)
     skills: list[str] | None = Field(default=None, max_length=20)
     budget_amount: float | None = Field(default=None, ge=0, le=1_000_000_000)
@@ -82,6 +107,8 @@ class OpportunityUpdate(BaseModel):
     duration: str | None = Field(default=None, max_length=120)
     remote: bool | None = None
     description: str | None = Field(default=None, max_length=5000)
+    deadline: str | None = Field(default=None, max_length=120)
+    application_url: str | None = Field(default=None, max_length=1000)
 
     @model_validator(mode="after")
     def at_least_one(self) -> "OpportunityUpdate":
@@ -228,3 +255,81 @@ class PostRead(BaseModel):
         if len(value) != 64:
             raise ValueError("content_hash must be a sha256 hex digest")
         return value
+
+
+class AutonomySettingsRead(BaseModel):
+    enabled: bool
+    mode: str
+    auto_approval_threshold: float
+    approved_source_ids: list[int]
+    approved_categories: list[str]
+    daily_publish_limit: int
+    min_interval_seconds: int
+    pilot_channel: str | None
+    target_channel: str | None
+    source: str = "environment"
+    updated_at: datetime | None = None
+    updated_by: str | None = None
+
+
+class AutonomySettingsUpdate(BaseModel):
+    enabled: bool | None = None
+    mode: str | None = Field(default=None, pattern="^(shadow|supervised|production)$")
+    auto_approval_threshold: float | None = Field(default=None, ge=0.5, le=1.0)
+    approved_source_ids: list[int] | None = None
+    approved_categories: list[str] | None = None
+    daily_publish_limit: int | None = Field(default=None, ge=0, le=500)
+    min_interval_seconds: int | None = Field(default=None, ge=0, le=86400)
+    pilot_channel: str | None = Field(default=None, max_length=255)
+    target_channel: str | None = Field(default=None, max_length=255)
+
+    @model_validator(mode="after")
+    def at_least_one(self) -> "AutonomySettingsUpdate":
+        if not self.model_fields_set:
+            raise ValueError("provide at least one field to update")
+        return self
+
+
+class AutonomyDecisionRead(BaseModel):
+    id: int
+    opportunity_id: int
+    source_id: int | None
+    decision: str
+    classification: str | None
+    confidence: float
+    threshold: float
+    mode: str
+    actor: str
+    reason: str | None
+    details: dict | None
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AutonomyOverviewRead(BaseModel):
+    enabled: bool
+    mode: str
+    auto_approval_threshold: float
+    daily_publish_limit: int
+    min_interval_seconds: int
+    channel: str | None
+    auto_approved: int
+    human_review: int
+    rejected: int
+    quarantined: int
+    published: int
+    failed: int
+    decisions: int
+    would_auto_approve: int
+    would_auto_reject: int
+
+
+class AutonomyEvaluateRead(BaseModel):
+    opportunity_id: int
+    decision: str
+    reason: str
+    applied: bool
+    classification: str
+    confidence: float
+    risk_level: str
+    review_status: str

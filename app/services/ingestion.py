@@ -50,6 +50,7 @@ def _build_opportunity(
         collected_post_id=post.id,
         opportunity_type=extracted.opportunity_type,
         title=extracted.title,
+        client_name=extracted.client_name,
         category=extracted.category,
         skills=extracted.skills,
         budget_amount=extracted.budget_amount,

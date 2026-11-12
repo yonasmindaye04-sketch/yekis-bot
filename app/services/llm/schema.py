@@ -38,6 +38,7 @@ class LLMOpportunity(BaseModel):
 
     opportunity_type: OpportunityType
     title: str = Field(min_length=1, max_length=250)
+    client_name: str | None = Field(default=None, max_length=250)
     category: Category | None = None
     skills: list[Skill] = Field(default_factory=list, max_length=20)
     budget_amount: float | None = Field(default=None, ge=0, le=1_000_000_000)
@@ -81,6 +82,7 @@ class LLMOpportunity(BaseModel):
         return ExtractedOpportunity(
             opportunity_type=self.opportunity_type,
             title=self.title[:247],
+            client_name=self.client_name,
             category=self.category,
             skills=self.skills,
             budget_amount=self.budget_amount,
