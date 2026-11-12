@@ -34,6 +34,37 @@ def ingest_manual(payload: ManualIngestion, db: Session = Depends(get_db)):
     return opportunity
 
 
+@router.post(
+    "/collect",
+    dependencies=[Depends(require_role("collector", "admin"))],
+)
+async def trigger_collection(
+    source_id: int | None = Query(default=None, ge=1),
+    limit: int = Query(default=10, ge=1, le=50),
+    db: Session = Depends(get_db),
+):
+    from app.integrations.telegram.client import TelethonClient
+    from app.integrations.telegram.collector import collect_sources
+
+    client = TelethonClient()
+    try:
+        source_ids = [source_id] if source_id else None
+        results = await collect_sources(db, client, source_ids=source_ids, limit=limit)
+        return [
+            {
+                "source_id": r.source_id,
+                "status": r.status,
+                "fetched": r.fetched,
+                "ingested": r.ingested,
+                "duplicates": r.duplicates,
+                "error": r.error,
+            }
+            for r in results
+        ]
+    finally:
+        await client.close()
+
+
 @router.get(
     "/posts",
     response_model=list[PostRead],

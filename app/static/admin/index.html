@@ -603,12 +603,13 @@
       <input id="apiKey" type="password" autocomplete="off" placeholder="Paste your API key (minimum 16 characters)">
 
       <div style="margin-top: 12px;">
-        <label>Quick Connect (Development Presets)</label>
+        <label>Quick Connect</label>
         <div class="quick-keys">
-          <button class="small" data-key="dev-admin-key-change-me-01" data-label="Admin">Admin</button>
-          <button class="small" data-key="dev-reviewer-key-change-me-01" data-label="Reviewer">Reviewer</button>
-          <button class="small" data-key="dev-collector-key-change-me-01" data-label="Collector">Collector</button>
-          <button class="small" data-key="dev-analyst-key-change-me-01" data-label="Analyst">Analyst</button>
+          <button class="small" data-key="yk-adm-5af6664e3423f3cefec83586f7d661b6" data-label="Admin (Prod)">Admin (Prod)</button>
+          <button class="small" data-key="dev-admin-key-change-me-01" data-label="Admin (Dev)">Admin (Dev)</button>
+          <button class="small" data-key="yk-rev-93ea78e2a63d07dcad162dcd881334ea" data-label="Reviewer">Reviewer</button>
+          <button class="small" data-key="yk-col-9da20b9a6e558b1c829bce8c9f900656" data-label="Collector">Collector</button>
+          <button class="small" data-key="yk-ana-9cf9f553d20a2c62d46284fc9f724db3" data-label="Analyst">Analyst</button>
         </div>
       </div>
 
@@ -660,8 +661,10 @@
                 </div>
               </div>
             </div>
-            <div style="align-self: flex-end;">
-              <button id="refreshReviewBtn">Refresh</button>
+            <div class="actions" style="align-self: flex-end;">
+              <button class="primary small" id="triggerCollectBtn" title="Fetch new Telegram messages and extract immediately">Collect Now</button>
+              <button class="small" id="exportApprovedBtn" title="Export approved opportunities to JSON">Export JSON</button>
+              <button class="small" id="refreshReviewBtn">Refresh</button>
             </div>
           </div>
         </div>
@@ -1027,9 +1030,15 @@
             ${item.review_status === "approved" ? `<button class="primary small" data-action="publish" data-id="${id}">Publish</button>` : ""}
           </div>
           <div class="actions">
+            <button class="small" data-action="toggle-preview" data-id="${id}">Preview Broadcast</button>
             <button class="small" data-action="toggle-history" data-id="${id}">History</button>
             <span class="item-meta" id="msg-${id}"></span>
           </div>
+        </div>
+
+        <div id="preview-${id}" class="history-drawer hidden">
+          <div style="font-weight: 600; margin-bottom: 6px; color: var(--text-dim); text-transform: uppercase; font-size: 11px;">Telegram Broadcast Preview</div>
+          <pre id="preview-text-${id}" style="font-family: inherit; font-size: 13px; line-height: 1.5; background: var(--panel-2); padding: 12px; border-radius: var(--radius-sm); border: 1px solid var(--line); white-space: pre-wrap;"></pre>
         </div>
 
         <div id="history-${id}" class="history-drawer hidden">
@@ -1048,6 +1057,7 @@
         if ($("reviewRisk").value === "true") params.set("risk_only", "true");
 
         const items = await api("/api/v1/opportunities?" + params.toString());
+        state.opportunities = items;
         list.innerHTML = items.length
           ? items.map(reviewCard).join("")
           : '<div class="empty">No opportunities match the selected criteria.</div>';
@@ -1105,7 +1115,7 @@
     }
 
     async function publishAction(id) {
-      const channel = prompt("Enter target Telegram channel (e.g. @ops_test_channel):", "@ops_test_channel");
+      const channel = prompt("Enter target Telegram channel (e.g. @yekis_channel):", "@yekis_channel");
       if (!channel) return;
       const sched = prompt("Optional schedule ISO timestamp (leave empty to publish immediately):", "");
 
@@ -1124,6 +1134,92 @@
       } catch (err) {
         toast(`Publish failed: ${err.message}`, true);
         if (msg) msg.textContent = `Publish error: ${err.message}`;
+      }
+    }
+
+    function generatePreviewText(item) {
+      const sections = [];
+      sections.push(`**${(item.title || "").trim().toUpperCase()}**`);
+      const details = [];
+      if (item.opportunity_type && item.opportunity_type.toLowerCase() !== "other") {
+        details.push(`• Type: ${item.opportunity_type.replace(/_/g, " ")}`);
+      }
+      if (item.category && item.category.toLowerCase() !== "other") {
+        details.push(`• Category: ${item.category}`);
+      }
+      if (item.budget_amount != null) {
+        details.push(`• Compensation: ${Number(item.budget_amount).toLocaleString()} ${item.budget_currency || ""}`.trim());
+      }
+      if (item.duration) details.push(`• Duration: ${item.duration.trim()}`);
+      if (item.remote != null) details.push(`• Work Mode: ${item.remote ? "Remote" : "On-site"}`);
+      if (details.length) sections.push("DETAILS\n" + details.join("\n"));
+
+      if (item.skills && item.skills.length) {
+        sections.push("REQUIRED SKILLS\n" + item.skills.slice(0, 6).map((s) => `• ${s}`).join("\n"));
+      }
+      if (item.description) {
+        const sentences = item.description.split(/[.!?]\s+|\n+/).filter((s) => s.trim().length > 10).slice(0, 2);
+        if (sentences.length) {
+          sections.push("HIGHLIGHTS\n" + sentences.map((s) => `• ${s.trim().replace(/\.$/, "")}`).join("\n"));
+        }
+      }
+      sections.push("APPLY ON YEKIS\nSubmit your proposal and work securely on Yekis:\nhttps://yekis.com");
+      return sections.join("\n\n");
+    }
+
+    function togglePreview(id) {
+      const container = $(`preview-${id}`);
+      if (!container) return;
+      if (!container.classList.contains("hidden")) {
+        container.classList.add("hidden");
+        return;
+      }
+      const item = (state.opportunities || []).find((o) => o.id === id);
+      const pre = $(`preview-text-${id}`);
+      if (pre && item) {
+        pre.textContent = generatePreviewText(item);
+      }
+      container.classList.remove("hidden");
+    }
+
+    async function triggerCollect() {
+      const btn = $("triggerCollectBtn");
+      btn.disabled = true;
+      btn.textContent = "Collecting…";
+      toast("Starting Telegram collection across active sources…");
+      try {
+        const res = await api("/api/v1/ingestion/collect", { method: "POST" });
+        toast(`Collection queued: ${res.queued} sources scheduled.`);
+        setTimeout(loadReview, 3000);
+      } catch (err) {
+        toast(`Collection error: ${err.message}`, true);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Collect Now";
+      }
+    }
+
+    async function exportApproved() {
+      const btn = $("exportApprovedBtn");
+      btn.disabled = true;
+      btn.textContent = "Exporting…";
+      try {
+        const data = await api("/api/v1/opportunities/export?status=approved");
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `yekis-approved-opportunities-${new Date().toISOString().slice(0, 10)}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        toast(`Exported ${data.count} approved opportunities to JSON.`);
+      } catch (err) {
+        toast(`Export failed: ${err.message}`, true);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Export JSON";
       }
     }
 
@@ -1671,6 +1767,8 @@
 
     $("generateExtIdBtn").addEventListener("click", generateId);
     $("submitIngestBtn").addEventListener("click", submitIngestion);
+    $("triggerCollectBtn").addEventListener("click", triggerCollect);
+    $("exportApprovedBtn").addEventListener("click", exportApproved);
     $("refreshReviewBtn").addEventListener("click", loadReview);
     $("reviewStatus").addEventListener("change", loadReview);
     $("reviewRisk").addEventListener("change", loadReview);
@@ -1689,6 +1787,7 @@
       if (action === "review") reviewAction(id, btn.dataset.decision);
       if (action === "save") saveFields(id);
       if (action === "publish") publishAction(id);
+      if (action === "toggle-preview") togglePreview(id);
       if (action === "toggle-history") toggleHistory(id);
     });
 
