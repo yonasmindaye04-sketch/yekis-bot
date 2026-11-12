@@ -325,7 +325,23 @@ python -m app.integrations.telegram.collector --source-id 1 --limit 50
 
 Or run the worker + beat and let the `collect-telegram` schedule call it.
 
-### Check source health
+### Routing Telegram through Cloudflare
+
+Telegram MTProto traffic can be routed through a SOCKS5 or HTTP proxy. This is the supported way to reach Telegram from a restricted network, and it is how a **Cloudflare** front-end is used for local development:
+
+```env
+TELEGRAM_PROXY_TYPE=socks5
+TELEGRAM_PROXY_HOST=127.0.0.1
+TELEGRAM_PROXY_PORT=40000
+TELEGRAM_PROXY_RDNS=true
+```
+
+Common Cloudflare options:
+
+| Setup | Proxy settings | Notes |
+|---|---|---|
+| **Cloudflare WARP** in proxy mode | `socks5` / `127.0.0.1` / `40000` | Simplest for local development. WARP's local SOCKS5 listener changes the egress IP for Telegram. |
+| **Cloudflare Tunnel** (`cloudflared`) in front of a SOCKS5 endpoint | `socks5` / `<tunnel host>` / `
 
 ```bash
 curl -s http://localhost:8100/api/v1/sources -H "X-API-Key: $YI_ADMIN_KEY"

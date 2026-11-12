@@ -129,3 +129,21 @@ The pipeline verification script defaults to the rules extractor (`--provider ru
 - [ ] Register at least one `telegram` source with a public channel URL, with the bot as a member if publishing is also required.
 - [ ] Run the collector against it and confirm `extraction_method`, checkpoint advance, and duplicate prevention on real messages.
 - [ ] Decide the extraction strategy for bulk collection given the ~105 s/message provider latency.
+
+---
+
+## Cloudflare routing for local development
+
+Telegram MTProto traffic can be routed through a SOCKS5 or HTTP proxy. This is the supported way to front Telegram with Cloudflare for local development, and it is applied identically to the collector client, the publisher, and the login command.
+
+```env
+TELEGRAM_PROXY_TYPE=socks5
+TELEGRAM_PROXY_HOST=127.0.0.1
+TELEGRAM_PROXY_PORT=40000
+TELEGRAM_PROXY_RDNS=true
+```
+
+| Setup | Settings | Notes |
+|---|---|---|
+| Cloudflare WARP in proxy mode | `socks5` / `127.0.0.1` / `40000` | Simplest local option; changes the egress IP for Telegram. |
+| Cloudflare Tunnel (`cloudflared`) in front of a SOCKS5 endpoint | `socks5` / `

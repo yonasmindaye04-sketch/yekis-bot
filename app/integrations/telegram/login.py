@@ -43,7 +43,12 @@ async def _login(as_bot: bool) -> None:
         settings.telegram_bot_session_path if as_bot else settings.telegram_session_path
     )
     session_path.parent.mkdir(parents=True, exist_ok=True)
-    client = TelegramClient(str(session_path), settings.telegram_api_id, settings.telegram_api_hash)
+    client = TelegramClient(
+        str(session_path),
+        settings.telegram_api_id,
+        settings.telegram_api_hash,
+        proxy=settings.telegram_proxy,
+    )
 
     if as_bot:
         # Non-interactive bot login. The bot must already be a member/admin of

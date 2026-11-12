@@ -33,6 +33,14 @@ class Settings(BaseSettings):
     # Bot session used by the publisher when no bot token is configured.
     telegram_bot_session_path: str = "var/telegram_bot"
     telegram_fetch_limit: int = 100
+    # Optional proxy for Telegram traffic. Use it to route MTProto through a
+    # Cloudflare tunnel or a Cloudflare WARP SOCKS5 proxy, which is the
+    # supported way to reach Telegram from a restricted network.
+    # Example (WARP proxy mode): socks5 / 127.0.0.1 / 40000
+    telegram_proxy_type: str = ""
+    telegram_proxy_host: str = ""
+    telegram_proxy_port: int = 0
+    telegram_proxy_rdns: bool = True
 
     # Background processing (M2).
     redis_url: str = "redis://localhost:6382/0"
@@ -79,6 +87,24 @@ class Settings(BaseSettings):
     @property
     def telegram_ready(self) -> bool:
         return bool(self.telegram_enabled and self.telegram_api_id and self.telegram_api_hash)
+
+    @property
+    def telegram_proxy(self) -> tuple[str, str, int, bool] | None:
+        """Telethon proxy tuple, or None when no proxy is configured."""
+        kind = self.telegram_proxy_type.strip().lower()
+        if not kind or not self.telegram_proxy_host or not self.telegram_proxy_port:
+            return None
+        if kind not in ("socks5", "http"):
+            raise ValueError(
+                "TELEGRAM_PROXY_TYPE must be 'socks5' or 'http', "
+                f"got {kind!r}"
+            )
+        return (
+            kind,
+            self.telegram_proxy_host,
+            int(self.telegram_proxy_port),
+            self.telegram_proxy_rdns,
+        )
 
     @property
     def allowed_publish_channels(self) -> list[str]:

@@ -55,6 +55,7 @@ class TelethonClient:
             str(session_path),
             self._settings.telegram_api_id,
             self._settings.telegram_api_hash,
+            proxy=getattr(self._settings, "telegram_proxy", None),
         )
         await self._client.connect()
         if not await self._client.is_user_authorized():

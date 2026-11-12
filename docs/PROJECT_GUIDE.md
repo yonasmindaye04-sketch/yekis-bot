@@ -458,6 +458,10 @@ Startup behavior:
 | `TELEGRAM_BOT_TOKEN` | unset | Bot token from BotFather, used for **publishing only**. Bots cannot read channel history. |
 | `TELEGRAM_SESSION_PATH` | `var/telegram_user` | User session used by the **collector**; created with `login --as user`. |
 | `TELEGRAM_BOT_SESSION_PATH` | `var/telegram_bot` | Bot session used by the publisher; created with `login --as bot`. |
+| `TELEGRAM_PROXY_TYPE` | empty | `socks5` or `http`. Routes Telegram MTProto through a proxy (Cloudflare WARP or a Cloudflare Tunnel in front of a SOCKS5 endpoint). Empty connects directly. |
+| `TELEGRAM_PROXY_HOST` | empty | Proxy host, e.g. `127.0.0.1` for a local WARP proxy. |
+| `TELEGRAM_PROXY_PORT` | `0` | Proxy port, e.g. `40000` for WARP proxy mode. |
+| `TELEGRAM_PROXY_RDNS` | `true` | Resolve DNS through the proxy (recommended for SOCKS5). |
 | `TELEGRAM_FETCH_LIMIT` | `100` | Maximum messages per fetch. |
 
 ### Background processing

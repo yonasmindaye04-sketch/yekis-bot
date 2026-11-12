@@ -65,6 +65,7 @@ class TelethonPublisher:
             str(session_path),
             self._settings.telegram_api_id,
             self._settings.telegram_api_hash,
+            proxy=getattr(self._settings, "telegram_proxy", None),
         )
         if use_bot:
             await self._client.start(bot_token=self._settings.telegram_bot_token)
