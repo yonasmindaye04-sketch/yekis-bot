@@ -88,7 +88,9 @@ def test_publish_endpoint_publishes_and_lists(client):
         _clear_override()
 
     assert len(fake.sent) == 1
-    assert "Publication source" in fake.sent[0][1]
+    assert "APPLY ON YEKIS" in fake.sent[0][1]
+    assert "https://yekis.com" in fake.sent[0][1]
+    assert "Source:" not in fake.sent[0][1]
 
 
 def test_publish_endpoint_refuses_unapproved_opportunity(client):

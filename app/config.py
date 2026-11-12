@@ -90,6 +90,7 @@ class Settings(BaseSettings):
     publishing_enabled: bool = False
     publishing_allowed_channels: str = ""
     publishing_max_attempts: int = 3
+    platform_url: str = "https://yekis.com"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

@@ -139,9 +139,10 @@ def test_publish_sends_once_with_attribution(db_session, source):
     assert len(fake.sent) == 1
     channel, text = fake.sent[0]
     assert channel == "audit_publish"
-    assert "Audit test channel" in text
-    assert "https://t.me/audit_test_channel" in text
-    assert "Budget: 300 USD" in text
+    assert "Compensation: 300 USD" in text
+    assert "APPLY ON YEKIS" in text
+    assert "https://yekis.com" in text
+    assert "Source:" not in text
 
 
 def test_replaying_the_same_publication_does_not_double_send(db_session, source):
@@ -321,7 +322,7 @@ def test_approval_is_rechecked_at_send_time(db_session, source):
     assert publication.status == "scheduled"
 
 
-def test_formatting_always_keeps_attribution(db_session, source):
+def test_formatting_within_length_bounds(db_session, source):
     opportunity = _approved(db_session, source, "long-1")
     opportunity.description = "x" * 5000
     db_session.commit()
@@ -329,6 +330,6 @@ def test_formatting_always_keeps_attribution(db_session, source):
 
     text = format_publication(opportunity, source)
     assert len(text) <= MAX_MESSAGE_LENGTH
-    assert "Source: Audit test channel" in text
-    assert "https://t.me/audit_test_channel" in text
-    assert text.endswith("https://t.me/audit_test_channel")
+    assert "APPLY ON YEKIS" in text
+    assert "https://yekis.com" in text
+    assert "Source:" not in text

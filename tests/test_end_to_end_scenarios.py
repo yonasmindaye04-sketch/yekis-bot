@@ -290,8 +290,9 @@ def test_scenario_6_publishing(client, reviewer_client, db_session):
 
     sent_channel, sent_text = fake_publisher.sent[0]
     assert sent_channel == "audit_channel"
-    assert "Source: Scenario Test Channel" in sent_text
-    assert "https://t.me/scenario_test_channel" in sent_text
+    assert "APPLY ON YEKIS" in sent_text
+    assert "https://yekis.com" in sent_text
+    assert "Source:" not in sent_text
 
 
 # ==============================================================================

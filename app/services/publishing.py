@@ -239,7 +239,7 @@ async def publish_publication(
 
     source = opportunity.post.source if opportunity.post else None
     try:
-        text = format_publication(opportunity, source)
+        text = format_publication(opportunity, source, settings=settings)
     except FormattingError as exc:
         publication.status = "failed"
         publication.error = f"FormattingError: {exc}"[:2000]
