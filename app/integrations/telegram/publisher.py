@@ -85,9 +85,10 @@ class TelethonPublisher:
         if self._settings.telegram_bot_token:
             import httpx
 
+            target_chat = f"@{reference}" if not reference.startswith(("-", "@")) else reference
             url = f"https://api.telegram.org/bot{self._settings.telegram_bot_token}/sendMessage"
             payload = {
-                "chat_id": reference,
+                "chat_id": target_chat,
                 "text": text,
                 "parse_mode": "Markdown",
                 "disable_web_page_preview": True,
