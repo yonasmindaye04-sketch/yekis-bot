@@ -1,6 +1,7 @@
 services:
   db:
     image: postgres:16-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_DB: yekis_intelligence
       POSTGRES_USER: yekis_intel
@@ -17,6 +18,7 @@ services:
 
   redis:
     image: redis:7-alpine
+    restart: unless-stopped
     # Loopback-only until an external service needs the broker. The API, worker,
     # and beat reach it over the compose network.
     ports:
@@ -29,6 +31,7 @@ services:
 
   api:
     build: .
+    restart: unless-stopped
     env_file: .env
     environment:
       DATABASE_URL: postgresql+psycopg://yekis_intel:yekis_intel_dev@db:5432/yekis_intelligence
@@ -46,6 +49,7 @@ services:
 
   worker:
     build: .
+    restart: unless-stopped
     env_file: .env
     environment:
       DATABASE_URL: postgresql+psycopg://yekis_intel:yekis_intel_dev@db:5432/yekis_intelligence
@@ -63,6 +67,7 @@ services:
 
   beat:
     build: .
+    restart: unless-stopped
     env_file: .env
     environment:
       DATABASE_URL: postgresql+psycopg://yekis_intel:yekis_intel_dev@db:5432/yekis_intelligence
