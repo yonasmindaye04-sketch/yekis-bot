@@ -43,26 +43,42 @@ async def trigger_collection(
     limit: int = Query(default=10, ge=1, le=50),
     db: Session = Depends(get_db),
 ):
-    from app.integrations.telegram.client import TelethonClient
+    from app.integrations.telegram.client import TelegramNotConfigured, TelethonClient
     from app.integrations.telegram.collector import collect_sources
 
-    client = TelethonClient()
     try:
-        source_ids = [source_id] if source_id else None
-        results = await collect_sources(db, client, source_ids=source_ids, limit=limit)
+        client = TelethonClient()
+        try:
+            source_ids = [source_id] if source_id else None
+            results = await collect_sources(db, client, source_ids=source_ids, limit=limit)
+            return [
+                {
+                    "source_id": r.source_id,
+                    "status": r.status,
+                    "fetched": r.fetched,
+                    "ingested": r.ingested,
+                    "duplicates": r.duplicates,
+                    "error": r.error,
+                }
+                for r in results
+            ]
+        finally:
+            await client.close()
+    except TelegramNotConfigured:
         return [
             {
-                "source_id": r.source_id,
-                "status": r.status,
-                "fetched": r.fetched,
-                "ingested": r.ingested,
-                "duplicates": r.duplicates,
-                "error": r.error,
+                "source_id": 0,
+                "status": "cloud_worker_scheduled",
+                "fetched": 0,
+                "ingested": 0,
+                "duplicates": 0,
+                "error": None,
+                "message": (
+                    "Live scraping runs on hourly GitHub Actions runners. "
+                    "Visit GitHub Actions to trigger an instant run."
+                ),
             }
-            for r in results
         ]
-    finally:
-        await client.close()
 
 
 @router.get(

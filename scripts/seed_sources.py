@@ -36,7 +36,11 @@ def seed() -> None:
                 db.add(src)
                 print(f"Seeded source: {src_data['name']} ({src_data['source_url']})")
             else:
-                print(f"Source already exists: {existing.name} (id={existing.id})")
+                existing.is_active = True
+                existing.next_attempt_at = None
+                existing.consecutive_failures = 0
+                existing.last_error = None
+                print(f"Source active and backoff reset: {existing.name} (id={existing.id})")
         db.commit()
     finally:
         db.close()

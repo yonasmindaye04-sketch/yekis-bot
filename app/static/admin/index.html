@@ -1194,11 +1194,15 @@
       const btn = $("triggerCollectBtn");
       btn.disabled = true;
       btn.textContent = "Collecting…";
-      toast("Starting Telegram collection across active sources…");
+      toast("Requesting Telegram collection cycle…");
       try {
         const res = await api("/api/v1/ingestion/collect", { method: "POST" });
-        toast(`Collection queued: ${res.queued} sources scheduled.`);
-        setTimeout(loadReview, 3000);
+        if (Array.isArray(res) && res[0] && res[0].status === "cloud_worker_scheduled") {
+          toast("Telegram scraper runs continuously on GitHub Actions. To trigger an instant scrape, open GitHub Actions.", false);
+        } else {
+          toast("Collection request completed. Refreshing review queue…");
+        }
+        setTimeout(loadReview, 2500);
       } catch (err) {
         toast(`Collection error: ${err.message}`, true);
       } finally {
