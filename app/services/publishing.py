@@ -74,6 +74,13 @@ class PublicationNotDue(PublishingError):
     status_code = 409
 
 
+class AutonomyBlocked(PublishingError):
+    """An autonomous publication failed its send-time eligibility recheck."""
+
+    code = "autonomy_blocked"
+    status_code = 409
+
+
 class InvalidSchedule(PublishingError):
     code = "invalid_schedule"
     status_code = 422
@@ -145,6 +152,8 @@ def create_or_get_publication(
     settings=default_settings,
     scheduled_at: datetime | None = None,
     now: datetime | None = None,
+    is_autonomous: bool = False,
+    autonomy_mode: str | None = None,
 ) -> Publication:
     if not settings.publishing_enabled:
         raise PublishingDisabled("publishing is disabled")
@@ -195,6 +204,9 @@ def create_or_get_publication(
         created_by=principal.name,
         created_at=now,
         updated_at=now,
+        is_autonomous=is_autonomous,
+        autonomy_mode=autonomy_mode,
+        content_hash=opportunity.post.content_hash if opportunity.post else None,
     )
     db.add(publication)
     db.commit()
@@ -226,8 +238,31 @@ async def publish_publication(
 
     opportunity = _load_opportunity(db, publication.opportunity_id)
     if opportunity.review_status != "approved":
+        if publication.is_autonomous:
+            # An autonomous publication that is no longer approved is
+            # cancelled, not retried: the opportunity may have been rejected
+            # after it was scheduled.
+            publication = db.get(Publication, publication.id)
+            if publication is not None:
+                publication.status = "cancelled"
+                publication.error = "cancelled: the opportunity is no longer approved"
+                publication.updated_at = now
+                db.commit()
         raise NotApproved("opportunity is no longer approved")
     validate_channel(publication.channel, settings)
+
+    if publication.is_autonomous:
+        from app.services.autonomy import recheck_eligibility
+
+        reason = recheck_eligibility(db, opportunity)
+        if reason is not None:
+            publication = db.get(Publication, publication.id)
+            if publication is not None:
+                publication.status = "cancelled"
+                publication.error = f"cancelled: {reason}"[:2000]
+                publication.updated_at = now
+                db.commit()
+            raise AutonomyBlocked(f"autonomous publication blocked: {reason}")
 
     scheduled_at = _utc(publication.scheduled_at)
     if scheduled_at is not None and scheduled_at > now and not force:
@@ -278,7 +313,7 @@ async def publish_publication(
         raise PublicationFailed("publication row disappeared after send")
     publication.status = "published"
     publication.external_message_id = reference.external_message_id
-    publication.published_at = datetime.now(UTC)
+    publication.published_at = now
     publication.error = None
     publication.updated_at = datetime.now(UTC)
     db.commit()

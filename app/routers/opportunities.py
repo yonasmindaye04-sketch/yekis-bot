@@ -15,6 +15,12 @@ from app.schemas import (
     ReviewUpdate,
 )
 from app.security.auth import Principal, require_role
+from app.services.classification.taxonomy import (
+    NON_TARGET_CLASSIFICATIONS,
+    PUBLISHABLE_CLASSIFICATIONS,
+    UNCERTAIN_CLASSIFICATIONS,
+    UNSAFE_CLASSIFICATIONS,
+)
 from app.services.publishing import (
     PublishingError,
     publish_opportunity,
@@ -24,6 +30,25 @@ from app.services.review import InvalidEdit, InvalidTransition, apply_edit, appl
 
 router = APIRouter(prefix="/opportunities", tags=["opportunities"])
 READ_ROLES = ("admin", "reviewer", "collector", "analyst")
+
+#: Dashboard filters over the classification taxonomy.
+CLASSIFICATION_GROUPS: dict[str, tuple[str, ...]] = {
+    "freelance": PUBLISHABLE_CLASSIFICATIONS,
+    "employment": NON_TARGET_CLASSIFICATIONS,
+    "education": (
+        "educational_content",
+        "skills_tips",
+        "training_announcement",
+    ),
+    "announcement": (
+        "general_announcement",
+        "news_and_information",
+        "community_discussion",
+        "marketplace_promotion",
+    ),
+    "suspicious": UNSAFE_CLASSIFICATIONS,
+    "ambiguous": UNCERTAIN_CLASSIFICATIONS,
+}
 
 
 def _get_opportunity(db: Session, opportunity_id: int) -> Opportunity:
@@ -46,6 +71,12 @@ def list_opportunities(
         default=None, pattern="^(pending_review|needs_review|approved|rejected)$"
     ),
     risk_only: bool = Query(default=False),
+    classification: str | None = Query(default=None, max_length=40),
+    group: str | None = Query(
+        default=None,
+        pattern="^(freelance|employment|education|announcement|suspicious|ambiguous)$",
+    ),
+    quarantined: bool | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
@@ -57,6 +88,14 @@ def list_opportunities(
         statement = statement.where(Opportunity.review_status == status)
     if risk_only:
         statement = statement.where(Opportunity.risk_score > 0)
+    if classification:
+        statement = statement.where(Opportunity.classification == classification)
+    if group:
+        statement = statement.where(
+            Opportunity.classification.in_(CLASSIFICATION_GROUPS[group])
+        )
+    if quarantined is not None:
+        statement = statement.where(Opportunity.quarantined.is_(quarantined))
     return list(db.scalars(statement.limit(limit).offset(offset)).all())
 
 

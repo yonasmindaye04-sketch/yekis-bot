@@ -196,6 +196,29 @@ Yekis Intelligence is an asynchronous content discovery, extraction, risk evalua
 - **Mandatory Attribution**: Broadcast messages must retain original source attribution (`Source: <name>` and source URL). Attribution is appended after message sizing so truncation cannot remove it.
 - **At-Most-Once Sending Protection**: The database row status transitions to `sending` before network dispatch. If an unhandled network error or process termination occurs mid-send, the publication is not automatically retried; it transitions to `publication_unknown` for human verification.
 
+### 7.5 Classification Engine
+- **Classification Is Separate From Category**: `Opportunity.classification` states what the post *is*; `Opportunity.category` states what the work is about. A category is never evidence that a post is a job.
+- **Closed Taxonomy**: The only allowed values are the 25 in `app/services/classification/taxonomy.py`. Groups A (publishable), B (non-target), C (non-job), D (unsafe) and E (uncertain) are disjoint.
+- **Evidence Rule**: A post becomes a publishable candidate only when a seeking party is present together with a task, an application path, a payment term, or a duration. Keyword presence alone never qualifies a post.
+- **Word Boundaries**: Signal matching uses regular expressions with word boundaries. Bare substring matching is prohibited.
+- **Original Text Is Ground Truth**: Stage 1 normalizes into a separate representation. `collected_posts.original_text` is never modified.
+- **Deterministic Risk Floor**: The risk engine runs on every post and is computed without a model. A model may only raise the risk level, never lower it. `upfront_payment`, `prohibited_content`, `sensitive_data_request`, `impersonation` and `off_platform_evasion` always block automatic approval.
+- **Grounding**: Every model produced budget, deadline, client, and link must be found in the original text or it is discarded and the post is routed to human review.
+- **No Model Means No Auto Approval**: Without a configured classification provider the confidence is capped below the automatic approval threshold. A deterministic-only deployment can never publish on its own.
+- **Failure Is Not Silence**: A provider failure falls back to the deterministic result, lowers the confidence, and records the reason. Ingestion is never blocked by a model call.
+
+### 7.6 Autonomous Approval & Publishing
+- **Off By Default**: `AUTONOMY_ENABLED` defaults to `false` and `AUTONOMY_MODE` defaults to `shadow`. Production autonomy requires an explicit owner action.
+- **Three Modes**: `shadow` records decisions and publishes nothing, `supervised` publishes to the pilot channel, `production` publishes to the target channel. The system never escalates itself.
+- **Approval Gates**: An automatic approval requires a publishable classification, confidence at or above the configured threshold, no blocking risk indicator, an approved and active source, an approved category, valid content, and no duplicate.
+- **Send-Time Recheck**: Eligibility is re-evaluated immediately before the message is sent. A scheduled autonomous publication whose opportunity is no longer approved is cancelled, not sent.
+- **Limits**: A daily limit and a minimum interval are re-checked before every single message, not only once per cycle.
+- **Idempotency**: The `(opportunity, channel)` unique constraint and the content hash prevent a second message for the same content.
+- **Fail Closed**: An empty channel allowlist, a missing channel, a disabled engine, or a zero limit all stop publishing.
+- **Append-Only Audit**: `autonomy_decisions` and `review_events` are append only. Every automatic approval records `approval_method`, `approval_reason`, `approved_at`, `approved_by`, the classifier version, the model, the confidence, and the risk assessment.
+- **Human Override Wins**: A reviewer may override any automatic decision, including an automatic rejection. The override is recorded as a `manual_override` event.
+- **No Financial Capability**: Autonomous publishing sends a formatted opportunity message to a Telegram channel. It never touches escrow, wallets, payouts, invoices, milestones, or marketplace contracts.
+
 ---
 
 ## 8. Build, Testing & Quality Gates
@@ -250,6 +273,9 @@ The standards in this document are enforced in CI and by the local quality gates
 | 6.3 Session handling | `test_inactivity_timeout_is_thirty_minutes`, `test_401_response_clears_authentication_state` | Enforced |
 | 8.2 Quality gates | `ruff check app tests migrations scripts` and `python -m compileall -q app tests migrations scripts` | Enforced |
 | 8.3 Automated tests | `pytest` (full suite green, SQLite in-memory, no live external calls) | Enforced |
+| 7.5 Classification engine | `tests/test_classification_engine.py` (dataset driven, 27 labelled cases, permanent regression for the skills tips post), `tests/test_autonomy.py` | Enforced |
+| 7.6 Autonomous approval | `tests/test_autonomy.py` (three decision levels, audit trail, human override), `tests/test_autonomous_publishing.py` (limits, idempotency, duplication, cancellation, uncertain send state) | Enforced |
+| 7.6 Autonomous publishing off by default | `tests/test_autonomy.py::test_autonomy_is_disabled_by_default`, `test_shadow_mode_records_the_decision_without_approving` | Enforced |
 | 8.4 Documentation parity | `README.md`, `rules.md`, and `docs/` updated in the same commit as behaviour changes | Process rule |
 
 The dashboard is served from the container image. After changing

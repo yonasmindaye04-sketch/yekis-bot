@@ -35,6 +35,37 @@ def main() -> int:
         published = asyncio.run(_publish())
         print(f"Broadcast processing complete: {len(published)} items published.")
 
+        # 3. Autonomous evaluation and auto-publishing cycle
+        try:
+            from app.services.autonomy import (
+                evaluate_pending_opportunities,
+                resolve_config,
+                run_autonomous_publish_cycle,
+            )
+
+            config = resolve_config(db, settings)
+            if config.enabled and config.mode in ("supervised", "production"):
+                print(f"Autonomy active (mode={config.mode}): evaluating pending opportunities...")
+                outcomes = evaluate_pending_opportunities(db, settings=settings)
+                print(f"Evaluated {len(outcomes)} opportunities: {[o.decision for o in outcomes]}")
+
+                async def _auto_publish():
+                    pub = TelethonPublisher(settings=settings)
+                    try:
+                        return await run_autonomous_publish_cycle(
+                            db, publisher=pub, settings=settings
+                        )
+                    finally:
+                        await pub.close()
+
+                auto_res = asyncio.run(_auto_publish())
+                print(f"Autonomous publish cycle result: {auto_res}")
+            else:
+                print(
+                    f"Autonomy inactive or in shadow mode (enabled={config.enabled}, mode={config.mode})."
+                )
+        except Exception as auto_exc:
+            print(f"Notice: Autonomy cycle encountered: {auto_exc}", file=sys.stderr)
         return 0 if outcome.status in ("succeeded", "completed", "skipped") else 1
     except Exception as exc:
         print(f"Error during collection/publication execution: {exc}", file=sys.stderr)

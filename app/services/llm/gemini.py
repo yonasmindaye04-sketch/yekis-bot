@@ -17,6 +17,14 @@ from urllib.parse import quote
 
 import httpx
 
+from app.services.classification.prompts import (
+    CLASSIFICATION_SYSTEM_PROMPT,
+    build_classification_user_content,
+)
+from app.services.classification.schema import (
+    AIPostClassification,
+    parse_classification_json,
+)
 from app.services.extractor import ExtractedOpportunity
 from app.services.llm.base import (
     ProviderConfigurationError,
@@ -58,6 +66,10 @@ class GeminiProvider:
     def __repr__(self) -> str:
         return f"GeminiProvider(model={self._model!r}, base_url={self._base_url!r})"
 
+    @property
+    def model(self) -> str:
+        return self._model
+
     def _request_payload(self, text: str) -> dict[str, Any]:
         content = text[: self._max_input_chars]
         return {
@@ -75,7 +87,8 @@ class GeminiProvider:
             },
         }
 
-    def extract(self, text: str) -> ExtractedOpportunity:
+    def _generate_content(self, payload: dict[str, Any]) -> str:
+        """Send one generateContent request and return the text content."""
         model = quote(self._model, safe="-._")
         url = f"{self._base_url}/models/{model}:generateContent"
         try:
@@ -85,7 +98,7 @@ class GeminiProvider:
                     "x-goog-api-key": self._api_key,
                     "Content-Type": "application/json",
                 },
-                json=self._request_payload(text),
+                json=payload,
                 timeout=self._timeout,
             )
         except httpx.HTTPError as exc:
@@ -128,8 +141,32 @@ class GeminiProvider:
 
         if not content.strip():
             raise ProviderResponseError("Gemini response did not contain JSON content")
+        return content
 
-        return parse_llm_json(content)
+    def _classification_payload(self, text: str) -> dict[str, Any]:
+        content = text[: self._max_input_chars]
+        return {
+            "systemInstruction": {"parts": [{"text": CLASSIFICATION_SYSTEM_PROMPT}]},
+            "contents": [
+                {
+                    "role": "user",
+                    "parts": [{"text": build_classification_user_content(content)}],
+                }
+            ],
+            "generationConfig": {
+                "temperature": 0,
+                "maxOutputTokens": self._max_output_tokens,
+                "responseMimeType": "application/json",
+            },
+        }
+
+    def extract(self, text: str) -> ExtractedOpportunity:
+        return parse_llm_json(self._generate_content(self._request_payload(text)))
+
+    def classify(self, text: str) -> AIPostClassification:
+        """Classify a post. The model proposes; it never decides."""
+        content = self._generate_content(self._classification_payload(text))
+        return parse_classification_json(content)
 
     def close(self) -> None:
         self._client.close()

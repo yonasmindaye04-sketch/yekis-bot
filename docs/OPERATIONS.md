@@ -414,6 +414,8 @@ celery -A app.worker.celery_app:celery_app beat --loglevel=INFO
 |---|---|---|
 | `yekis.collect_telegram` | beat every `COLLECT_INTERVAL_SECONDS` or manual | Collect active Telegram sources. |
 | `yekis.publish_due` | beat every 60 seconds | Publish scheduled/due publications. |
+| `yekis.autonomy_evaluate` | beat every `AUTONOMY_EVALUATE_INTERVAL_SECONDS` | Classify waiting posts and apply the autonomy decision. |
+| `yekis.autonomous_publish` | beat every `AUTONOMOUS_PUBLISH_INTERVAL_SECONDS` | Publish what the autonomy engine approved. |
 | `yekis.ingest_post` | programmatic/worker use | Idempotent ingestion wrapper. |
 
 ### Inspect jobs
@@ -557,6 +559,60 @@ Restart the API and worker/beat. The API will return `409 publishing_disabled`; 
 
 ---
 
+## 9.1 Autonomous publishing runbook
+
+Autonomous approval is **off by default** and defaults to `shadow` mode. The
+full safety model is in
+[`docs/audit/AUTONOMY_SAFETY_REPORT.md`](audit/AUTONOMY_SAFETY_REPORT.md).
+
+### Check the current state
+
+```bash
+curl -H "X-API-Key: $YI_ADMIN_KEY" http://localhost:8100/api/v1/autonomy/settings
+curl -H "X-API-Key: $YI_ADMIN_KEY" http://localhost:8100/api/v1/autonomy/overview
+```
+
+### Run one evaluation pass manually
+
+```bash
+celery -A app.worker.celery_app:celery_app call yekis.autonomy_evaluate
+```
+
+In shadow mode this records `would_auto_approve` and `would_auto_reject`
+decisions and changes nothing else. Compare them with the human decisions on
+the review queue before enabling anything else.
+
+### Run one publishing cycle manually
+
+```bash
+celery -A app.worker.celery_app:celery_app call yekis.autonomous_publish
+```
+
+The cycle publishes nothing when the engine is disabled, when the mode is
+`shadow`, when the channel is not in `PUBLISHING_ALLOWED_CHANNELS`, when the
+daily limit is reached, or when the minimum interval has not elapsed.
+
+### Stop autonomous publishing immediately
+
+```bash
+curl -X PATCH -H "X-API-Key: $YI_ADMIN_KEY" -H "Content-Type: application/json"   -d '{"enabled": false}' http://localhost:8100/api/v1/autonomy/settings
+```
+
+This takes effect on the next cycle. Already approved opportunities stay in the
+review queue and are never sent.
+
+### Rollback the code
+
+```bash
+git switch <previous-ref>
+docker compose up --build -d api worker beat
+```
+
+The classification columns are additive, so the previous code keeps working on
+the migrated schema. `alembic downgrade -1` removes them if they must go.
+
+---
+
 ## 10. Monitoring
 
 ### Health and availability
@@ -575,6 +631,7 @@ Restart the API and worker/beat. The API will return `409 publishing_disabled`; 
 - `consecutive_failures` and `last_error` per source;
 - `job_executions` failures and `dead_letter_jobs` count;
 - publication `failed` count and `sending` age;
+- `autonomy_decisions` rows per hour and `would_auto_approve` volume;
 - `needs_review` and `pending_review` queue depth;
 - API 401/403 rates and 5xx rates;
 - database connections and disk usage.

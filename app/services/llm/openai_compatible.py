@@ -23,6 +23,14 @@ from typing import Any
 
 import httpx
 
+from app.services.classification.prompts import (
+    CLASSIFICATION_SYSTEM_PROMPT,
+    build_classification_user_content,
+)
+from app.services.classification.schema import (
+    AIPostClassification,
+    parse_classification_json,
+)
 from app.services.extractor import ExtractedOpportunity
 from app.services.llm.base import (
     ProviderAuthError,
@@ -82,6 +90,10 @@ class OpenAICompatibleProvider:
     def messages(self) -> list[dict[str, str]]:
         return [{"role": "system", "content": SYSTEM_PROMPT}]
 
+    @property
+    def model(self) -> str:
+        return self._model
+
     def _request_payload(self, text: str) -> dict[str, Any]:
         content = text[: self._max_input_chars]
         payload: dict[str, Any] = {
@@ -139,7 +151,8 @@ class OpenAICompatibleProvider:
                 self._sleep(self._retry_wait_seconds * attempt)
         raise last_error or ProviderError("LLM request failed")
 
-    def _extract_once(self, text: str) -> ExtractedOpportunity:
+    def _chat_content(self, payload: dict[str, Any]) -> str:
+        """Send one chat-completion request and return the raw content."""
         try:
             response = self._client.post(
                 f"{self._base_url}/chat/completions",
@@ -147,7 +160,7 @@ class OpenAICompatibleProvider:
                     "Authorization": f"Bearer {self._api_key}",
                     "Content-Type": "application/json",
                 },
-                json=self._request_payload(text),
+                json=payload,
                 timeout=self._timeout,
             )
         except httpx.TimeoutException as exc:
@@ -171,8 +184,48 @@ class OpenAICompatibleProvider:
             ) from exc
         if not isinstance(content, str) or not content.strip():
             raise ProviderResponseError("LLM response did not contain JSON content")
+        return content
 
-        return parse_llm_json(content)
+    def _extract_once(self, text: str) -> ExtractedOpportunity:
+        return parse_llm_json(self._chat_content(self._request_payload(text)))
+
+    def _classification_payload(self, text: str) -> dict[str, Any]:
+        content = text[: self._max_input_chars]
+        payload: dict[str, Any] = {
+            "model": self._model,
+            "temperature": 0,
+            "max_tokens": self._max_output_tokens,
+            "messages": [
+                {"role": "system", "content": CLASSIFICATION_SYSTEM_PROMPT},
+                {
+                    "role": "user",
+                    "content": build_classification_user_content(content),
+                },
+            ],
+        }
+        if self._response_format.strip().lower() not in ("", "none"):
+            payload["response_format"] = {"type": self._response_format}
+        payload.update(self._extra_body)
+        return payload
+
+    def classify(self, text: str) -> AIPostClassification:
+        """Classify a post with the same transport, retries, and errors.
+
+        The model never decides whether a post may be published; it only
+        proposes a classification that the deterministic risk engine and the
+        confidence rules still have to accept.
+        """
+        last_error: ProviderError | None = None
+        for attempt in range(1, self._max_attempts + 1):
+            try:
+                content = self._chat_content(self._classification_payload(text))
+                return parse_classification_json(content)
+            except (ProviderRateLimitError, ProviderUnavailableError) as exc:
+                last_error = exc
+                if attempt >= self._max_attempts:
+                    raise
+                self._sleep(self._retry_wait_seconds * attempt)
+        raise last_error or ProviderError("classification request failed")
 
     def close(self) -> None:
         self._client.close()

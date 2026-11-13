@@ -27,6 +27,19 @@ class InvalidEdit(Exception):
     status_code = 422
 
 
+def _is_automatic_override(opportunity: Opportunity, decision: str) -> bool:
+    """A reviewer may override a rejection that the system made.
+
+    A manual rejection stays locked: only an automated decision can be
+    overridden, and the override is written to the audit trail.
+    """
+    return (
+        opportunity.review_status == "rejected"
+        and opportunity.approval_method == "auto"
+        and decision == "approved"
+    )
+
+
 def apply_review(
     db: Session,
     opportunity: Opportunity,
@@ -39,22 +52,27 @@ def apply_review(
         return opportunity, None
 
     allowed = ALLOWED_TRANSITIONS.get(opportunity.review_status, set())
-    if decision not in allowed:
+    if decision not in allowed and not _is_automatic_override(opportunity, decision):
         raise InvalidTransition(
             f"{opportunity.review_status} cannot transition to {decision}"
         )
 
     from_status = opportunity.review_status
+    was_automatic = opportunity.approval_method == "auto"
     opportunity.review_status = decision
     opportunity.reviewed_at = datetime.now(UTC)
     opportunity.reviewed_by = principal.name
     if note is not None:
         opportunity.reviewer_note = note
+    if was_automatic:
+        # A human changed a decision that the autonomy engine made. The
+        # override is recorded as its own append-only event.
+        opportunity.approval_method = "manual"
 
     event = ReviewEvent(
         opportunity_id=opportunity.id,
         actor=principal.name,
-        event_type="status_change",
+        event_type="manual_override" if was_automatic else "status_change",
         from_status=from_status,
         to_status=decision,
         note=note,
