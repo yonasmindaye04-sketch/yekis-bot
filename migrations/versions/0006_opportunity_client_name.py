@@ -14,6 +14,10 @@ depends_on = None
 
 
 def upgrade():
+    inspector = sa.inspect(op.get_bind())
+    existing = {column["name"] for column in inspector.get_columns("opportunities")}
+    if "client_name" in existing:
+        return
     op.add_column(
         "opportunities",
         sa.Column("client_name", sa.String(length=250), nullable=True),
