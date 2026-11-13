@@ -10,7 +10,7 @@ pinned: false
 
 # Yekis Intelligence
 
-Independent intelligence service for the Yekis marketplace: FastAPI, PostgreSQL, source management, Telegram collection, background processing, rule/LLM extraction, an audit-trailed review queue, approval-gated publishing, analytics, and an authenticated admin dashboard.
+Independent intelligence service for the Yekis marketplace: FastAPI, PostgreSQL, source management, Telegram collection, background processing, rule/LLM extraction, a classification engine that decides whether a post really offers paid freelance work, an audit-trailed review queue, approval-gated publishing, autonomous approval with safety gates, analytics, and an authenticated admin dashboard.
 
 ## Documentation
 
@@ -20,6 +20,9 @@ Independent intelligence service for the Yekis marketplace: FastAPI, PostgreSQL,
 - [API reference](docs/API_REFERENCE.md) — every route, role, request/response shape, transition, and error code.
 - [Operations runbook](docs/OPERATIONS.md) — local/Docker setup, migrations, collector/publisher runbooks, monitoring, backup, and incident playbooks.
 - [Milestone execution audit](docs/audit/MILESTONE_EXECUTION.md) — what was implemented, the tests that prove it, and live-verification gaps.
+- [Classification engine plan](docs/audit/CLASSIFICATION_ENGINE_PLAN.md) — how the classification engine and the autonomy service are structured.
+- [Classification evaluation](docs/audit/CLASSIFICATION_EVALUATION.md) — precision, recall, false positive rate, and scam detection results.
+- [Autonomous publishing safety report](docs/audit/AUTONOMY_SAFETY_REPORT.md) — safety gates, rollout modes, deployment and rollback.
 
 ## Architecture
 
@@ -29,6 +32,57 @@ Independent intelligence service for the Yekis marketplace: FastAPI, PostgreSQL,
 - API-key service-to-service authentication with admin/reviewer/collector/analyst roles
 - Review decisions and field edits are append-only audit events
 - The service has no access to marketplace escrow, wallet, payout, or contract operations
+
+## Classification engine
+
+A post that mentions a job, skills, programming, money, or employment is not a
+freelance opportunity. Every ingested post is classified before it reaches the
+review queue by a six stage pipeline:
+
+| Stage | What it does | Module |
+|---|---|---|
+| 1 | normalizes the post without touching the original text | `app/services/classification/normalize.py` |
+| 2 | deterministic job detection with word boundary matching | `app/services/classification/deterministic.py` |
+| 3 | optional AI classification, structured JSON, closed schema, grounded | `app/services/classification/ai.py`, `schema.py` |
+| 4 | deterministic risk screening (15 indicators) | `app/services/classification/risk.py` |
+| 5 | merges the evidence, scores the confidence, assigns the decision | `app/services/classification/pipeline.py` |
+| 6 | publication eligibility | `app/services/autonomy.py` |
+
+The taxonomy has 24 values in five groups: publishable opportunities
+(`freelance_job`, `project_contract`, `remote_contract`,
+`consulting_opportunity`, `short_term_contract`), non-target opportunities
+(`full_time_employment`, `part_time_employment`, `internship`, `volunteering`,
+`apprenticeship`), non-job content (`educational_content`, `skills_tips`,
+`training_announcement`, `general_announcement`, `community_discussion`,
+`marketplace_promotion`, `news_and_information`), unsafe content
+(`suspicious_opportunity`, `scam_or_fraud`,
+`misleading_job_advertisement`, `prohibited_or_unsafe_content`), and uncertain
+content (`ambiguous`, `insufficient_information`, `needs_human_review`).
+
+The classification is stored **separately** from the job category. A post can
+be classified `educational_content` and still be categorised `education`.
+
+Two invariants hold at all times:
+
+- a deterministic risk finding can never be cleared by a model;
+- without a configured model the confidence is capped below the automatic
+  approval threshold, so a rules-only deployment can never publish on its own.
+
+## Autonomous approval
+
+Autonomous approval is **off by default** and defaults to `shadow` mode, where
+every decision is recorded and nothing is published. Three modes are
+supported: `shadow`, `supervised` (pilot channel), and `production`.
+
+An opportunity is approved automatically only when it has a publishable
+classification, a confidence at or above the configurable threshold (0.95 by
+default), no deterministic risk indicator, an approved and active source, an
+approved category, valid content, and no duplicate. Every automatic decision is
+written to an append-only decision log with the actor, the reason, the
+confidence, the threshold, the classifier version, and the model that was used.
+
+The full safety model, the rollout procedure, and the rollback commands are in
+[the autonomous publishing safety report](docs/audit/AUTONOMY_SAFETY_REPORT.md).
 
 ## Quick start
 
@@ -97,13 +151,16 @@ The full route list, roles, and error codes are in the [API Reference](docs/API_
 - `PATCH /api/v1/sources/{id}/status` (admin, JSON body `{"is_active": false}`)
 - `POST /api/v1/ingestion/manual` (collector or admin)
 - `GET /api/v1/ingestion/posts` (collector/reviewer/analyst; `source_id`, `limit`, `offset`)
-- `GET /api/v1/opportunities` (any role; `status`, `risk_only`, `limit`, `offset`)
+- `GET /api/v1/opportunities` (any role; `status`, `risk_only`, `classification`, `group`, `quarantined`, `limit`, `offset`)
 - `GET /api/v1/opportunities/{id}` (any role)
 - `PATCH /api/v1/opportunities/{id}/review` (reviewer or admin)
 - `PATCH /api/v1/opportunities/{id}` (reviewer or admin; records an audit event)
 - `GET /api/v1/opportunities/{id}/events` (reviewer/admin/analyst)
 - `POST /api/v1/opportunities/{id}/publish` (reviewer or admin; immediate or scheduled)
 - `GET /api/v1/publications` and `GET /api/v1/publications/{id}` (reviewer/admin/analyst)
+- `GET /api/v1/autonomy/settings` (reviewer/admin/analyst) and `PATCH /api/v1/autonomy/settings` (admin)
+- `GET /api/v1/autonomy/overview` and `GET /api/v1/autonomy/decisions` (reviewer/admin/analyst)
+- `POST /api/v1/autonomy/opportunities/{id}/evaluate` (reviewer or admin)
 - `GET /api/v1/analytics/overview`, `/sources`, `/market`, `/trends` (analyst/reviewer/admin)
 
 ## Authentication and review audit
@@ -232,6 +289,39 @@ curl -X POST http://localhost:8100/api/v1/opportunities/1/publish \
 ```
 
 A `publications` row is written before the network call. A row left in `sending` after a crash is **not** automatically resent (it may already be public); the API returns `publication_unknown` so a human can reconcile it. Replaying a successful publish for the same `(opportunity, channel)` returns the original row and sends nothing. Every formatted message ends with the source name and URL; attribution is appended after truncation so it can never be cut off.
+
+## Autonomous publishing
+
+The autonomy engine can approve and publish qualified opportunities without a
+human click. It is **off by default** and defaults to `shadow` mode.
+
+```bash
+# 1. Shadow mode: record what would be approved, publish nothing
+AUTONOMY_ENABLED=true AUTONOMY_MODE=shadow
+
+# 2. Supervised mode: publish to a private pilot channel
+AUTONOMY_ENABLED=true AUTONOMY_MODE=supervised
+AUTONOMY_PILOT_CHANNEL=@yekis_pilot
+AUTONOMY_APPROVED_SOURCE_IDS=1,2
+
+# 3. Production mode: publish to the live channel, with limits
+AUTONOMY_ENABLED=true AUTONOMY_MODE=production
+AUTONOMY_TARGET_CHANNEL=@yekis_channel
+AUTONOMY_DAILY_PUBLISH_LIMIT=5 AUTONOMY_MIN_INTERVAL_SECONDS=900
+```
+
+The same values can be set from the dashboard (*Autonomy* tab), which writes
+them to `autonomy_settings` and takes precedence over the environment.
+
+Two background tasks drive the flow: `yekis.autonomy_evaluate` classifies the
+posts that are waiting for a decision, and `yekis.autonomous_publish` publishes
+the posts that the engine approved. Both run from the Celery beat schedule and
+both fail closed when autonomy is disabled.
+
+Safety gates, the rollout procedure, and the rollback commands are documented in
+[the autonomous publishing safety report](docs/audit/AUTONOMY_SAFETY_REPORT.md).
+Measuring the classifier is documented in
+[the classification evaluation report](docs/audit/CLASSIFICATION_EVALUATION.md).
 
 ## Analytics
 

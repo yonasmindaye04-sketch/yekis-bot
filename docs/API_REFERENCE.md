@@ -306,10 +306,24 @@ Requires any authenticated role. Query:
 |---|---|---|
 | `status` | none | One of `pending_review`, `needs_review`, `approved`, `rejected`. |
 | `risk_only` | `false` | When true, only `risk_score > 0`. |
+| `classification` | none | One exact classification value (see the taxonomy below). |
+| `group` | none | One of `freelance`, `employment`, `education`, `announcement`, `suspicious`, `ambiguous`. |
+| `quarantined` | none | When `true`, only quarantined opportunities. |
 | `limit` | `50` | Page size, max 200. |
 | `offset` | `0` | Page offset. |
 
 Ordering is `quality_score DESC, id DESC`.
+
+The classification groups map onto the taxonomy:
+
+| Group | Classifications |
+|---|---|
+| `freelance` | `freelance_job`, `project_contract`, `remote_contract`, `consulting_opportunity`, `short_term_contract` |
+| `employment` | `full_time_employment`, `part_time_employment`, `internship`, `volunteering`, `apprenticeship` |
+| `education` | `educational_content`, `skills_tips`, `training_announcement` |
+| `announcement` | `general_announcement`, `news_and_information`, `community_discussion`, `marketplace_promotion` |
+| `suspicious` | `suspicious_opportunity`, `scam_or_fraud`, `misleading_job_advertisement`, `prohibited_or_unsafe_content` |
+| `ambiguous` | `ambiguous`, `insufficient_information`, `needs_human_review` |
 
 **200** returns a list of `OpportunityRead`:
 
@@ -333,7 +347,29 @@ Ordering is `quality_score DESC, id DESC`.
   "extraction_method": "rules",
   "reviewed_at": null,
   "reviewed_by": null,
-  "reviewer_note": null
+  "reviewer_note": null,
+  "classification": "freelance_job",
+  "engagement_type": "freelance_job",
+  "is_genuine_opportunity": true,
+  "is_publishable": false,
+  "classification_confidence": 0.9,
+  "classification_evidence": [
+    "The post states that someone is looking for a person to do work"
+  ],
+  "classification_reasons": [],
+  "classification_method": "deterministic",
+  "classifier_version": "yi-classifier-1.0.0",
+  "model_provider": null,
+  "model_name": null,
+  "risk_level": "none",
+  "risk_assessment": {"risk_level": "none", "risk_score": 0, "flags": []},
+  "approval_method": null,
+  "approval_reason": null,
+  "approved_at": null,
+  "approved_by": null,
+  "quarantined": false,
+  "deadline": null,
+  "application_url": null
 }
 ```
 
@@ -613,6 +649,133 @@ Trends use UTC calendar days.
 
 ---
 
+## 8.1 Autonomous approval and publishing
+
+### `GET /api/v1/autonomy/settings`
+
+Requires `reviewer`, `admin`, or `analyst`. **200**:
+
+```json
+{
+  "enabled": false,
+  "mode": "shadow",
+  "auto_approval_threshold": 0.95,
+  "approved_source_ids": [],
+  "approved_categories": [],
+  "daily_publish_limit": 5,
+  "min_interval_seconds": 900,
+  "pilot_channel": null,
+  "target_channel": null,
+  "source": "environment",
+  "updated_at": null,
+  "updated_by": null
+}
+```
+
+`source` is `environment` while the environment defaults are in force and
+`database` once the dashboard has stored an override.
+
+### `PATCH /api/v1/autonomy/settings`
+
+Requires `admin`. Every field is optional, at least one field must be sent.
+
+```json
+{
+  "enabled": true,
+  "mode": "supervised",
+  "auto_approval_threshold": 0.95,
+  "approved_source_ids": [1, 2],
+  "approved_categories": ["software", "design"],
+  "daily_publish_limit": 5,
+  "min_interval_seconds": 900,
+  "pilot_channel": "@yekis_pilot",
+  "target_channel": "@yekis_channel"
+}
+```
+
+`mode` is `shadow`, `supervised`, or `production`. `auto_approval_threshold`
+must be between `0.5` and `1.0`.
+
+**200** returns the new settings. **422** `invalid_autonomy_settings` when a
+value is out of range. **403** `insufficient_role` for a non-admin key.
+
+### `GET /api/v1/autonomy/overview`
+
+Requires `reviewer`, `admin`, or `analyst`. **200** returns the counters:
+
+```json
+{
+  "enabled": true,
+  "mode": "shadow",
+  "auto_approval_threshold": 0.95,
+  "daily_publish_limit": 5,
+  "min_interval_seconds": 900,
+  "channel": null,
+  "auto_approved": 12,
+  "human_review": 31,
+  "rejected": 8,
+  "quarantined": 2,
+  "published": 4,
+  "failed": 1,
+  "decisions": 22,
+  "would_auto_approve": 9,
+  "would_auto_reject": 5
+}
+```
+
+`channel` is the channel that the current mode would publish to, or `null` in
+shadow mode.
+
+### `GET /api/v1/autonomy/decisions`
+
+Requires `reviewer`, `admin`, or `analyst`. **200** returns the append-only
+decision log, newest first, as `AutonomyDecisionRead`:
+
+```json
+[
+  {
+    "id": 22,
+    "opportunity_id": 41,
+    "source_id": 1,
+    "decision": "would_auto_approve",
+    "classification": "freelance_job",
+    "confidence": 0.976,
+    "threshold": 0.95,
+    "mode": "shadow",
+    "actor": "system:autonomy",
+    "reason": "The post is a genuine freelance or contract opportunity...",
+    "details": {"risk_level": "none", "risk_flags": []},
+    "created_at": "2026-11-12T09:14:22Z"
+  }
+]
+```
+
+Decisions are `auto_approved`, `auto_rejected`, `human_review_required`,
+`quarantined`, `would_auto_approve`, `would_auto_reject`, `auto_published`, and
+`publish_skipped`. Nothing in this log is ever updated or deleted.
+
+### `POST /api/v1/autonomy/opportunities/{opportunity_id}/evaluate`
+
+Requires `reviewer` or `admin`. Classifies one opportunity now and applies the
+autonomy decision. **200**:
+
+```json
+{
+  "opportunity_id": 41,
+  "decision": "auto_approved",
+  "reason": "The post is a genuine freelance or contract opportunity...",
+  "applied": true,
+  "classification": "freelance_job",
+  "confidence": 0.976,
+  "risk_level": "none",
+  "review_status": "approved"
+}
+```
+
+**404** `opportunity_not_found`.
+
+---
+
 ## 9. Endpoint summary
 
 | Method | Path | Auth | Purpose |
@@ -635,6 +798,11 @@ Trends use UTC calendar days.
 | POST | `/api/v1/opportunities/{id}/publish` | reviewer/admin | Publish or schedule. |
 | GET | `/api/v1/publications` | reviewer/admin/analyst | List publications. |
 | GET | `/api/v1/publications/{id}` | reviewer/admin/analyst | Read publication. |
+| GET | `/api/v1/autonomy/settings` | reviewer/admin/analyst | Read autonomy configuration. |
+| PATCH | `/api/v1/autonomy/settings` | admin | Change autonomy configuration. |
+| GET | `/api/v1/autonomy/overview` | reviewer/admin/analyst | Decision counters. |
+| GET | `/api/v1/autonomy/decisions` | reviewer/admin/analyst | Append-only decision log. |
+| POST | `/api/v1/autonomy/opportunities/{id}/evaluate` | reviewer/admin | Classify and decide now. |
 | GET | `/api/v1/analytics/overview` | analyst/reviewer/admin | Totals and status mix. |
 | GET | `/api/v1/analytics/sources` | analyst/reviewer/admin | Source quality. |
 | GET | `/api/v1/analytics/market` | analyst/reviewer/admin | Skills/budget/remote. |

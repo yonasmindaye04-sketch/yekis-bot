@@ -12,65 +12,68 @@ down_revision = "0006_opportunity_client_name"
 branch_labels = None
 depends_on = None
 
+# (name, type, server default literal). A column without a default keeps the
+# nullability of the matching model attribute.
 OPPORTUNITY_COLUMNS = (
-    ("classification", sa.String(length=40), "insufficient_information"),
+    ("classification", sa.String(length=40), "'insufficient_information'"),
     ("engagement_type", sa.String(length=40), None),
-    ("is_genuine_opportunity", sa.Boolean(), False),
-    ("is_publishable", sa.Boolean(), False),
-    ("classification_confidence", sa.Float(), 0.0),
-    ("classification_evidence", sa.JSON(), None),
-    ("classification_reasons", sa.JSON(), None),
-    ("classification_method", sa.String(length=30), "deterministic"),
+    ("is_genuine_opportunity", sa.Boolean(), "false"),
+    ("is_publishable", sa.Boolean(), "false"),
+    ("classification_confidence", sa.Float(), "0.0"),
+    ("classification_evidence", sa.JSON(), "'[]'"),
+    ("classification_reasons", sa.JSON(), "'[]'"),
+    ("classification_method", sa.String(length=30), "'deterministic'"),
     ("classifier_version", sa.String(length=30), None),
     ("model_provider", sa.String(length=30), None),
     ("model_name", sa.String(length=120), None),
-    ("risk_level", sa.String(length=20), "none"),
-    ("risk_assessment", sa.JSON(), None),
+    ("risk_level", sa.String(length=20), "'none'"),
+    ("risk_assessment", sa.JSON(), "'{}'"),
     ("approval_method", sa.String(length=20), None),
     ("approval_reason", sa.Text(), None),
     ("approved_at", sa.DateTime(timezone=True), None),
     ("approved_by", sa.String(length=120), None),
-    ("quarantined", sa.Boolean(), False),
+    ("quarantined", sa.Boolean(), "false"),
     ("deadline", sa.String(length=120), None),
     ("application_url", sa.String(length=1000), None),
 )
 
 PUBLICATION_COLUMNS = (
-    ("is_autonomous", sa.Boolean(), False),
+    ("is_autonomous", sa.Boolean(), "false"),
     ("autonomy_mode", sa.String(length=20), None),
     ("content_hash", sa.String(length=64), None),
 )
 
 
-def _add_column(table: str, column: sa.Column, default) -> None:
-    """Add a column only when it does not exist yet (idempotent upgrade)."""
+def _add_column(table: str, name: str, type_, default: str | None) -> None:
+    """Add a column only when it does not exist yet (idempotent upgrade).
+
+    A column with a server default is added as NOT NULL: the default fills
+    the existing rows, so no separate backfill statement is needed.
+    """
     inspector = sa.inspect(op.get_bind())
     existing = {column["name"] for column in inspector.get_columns(table)}
-    if column.name in existing:
+    if name in existing:
         return
-    op.add_column(table, column)
-    if default is not None:
-        op.execute(
-            sa.text(f"UPDATE {table} SET {column.name} = :default").bindparams(
-                default=default
-            )
-        )
+    if default is None:
+        op.add_column(table, sa.Column(name, type_, nullable=True))
+        return
+    op.add_column(
+        table,
+        sa.Column(
+            name,
+            type_,
+            nullable=False,
+            server_default=sa.text(default),
+        ),
+    )
 
 
 def upgrade():
     for name, type_, default in OPPORTUNITY_COLUMNS:
-        _add_column(
-            "opportunities",
-            sa.Column(name, type_, nullable=True),
-            default,
-        )
+        _add_column("opportunities", name, type_, default)
 
     for name, type_, default in PUBLICATION_COLUMNS:
-        _add_column(
-            "publications",
-            sa.Column(name, type_, nullable=True),
-            default,
-        )
+        _add_column("publications", name, type_, default)
 
     inspector = sa.inspect(op.get_bind())
     opportunity_indexes = {
@@ -101,8 +104,18 @@ def upgrade():
             sa.Column("enabled", sa.Boolean(), nullable=False),
             sa.Column("mode", sa.String(length=20), nullable=False),
             sa.Column("auto_approval_threshold", sa.Float(), nullable=False),
-            sa.Column("approved_source_ids", sa.JSON(), nullable=True),
-            sa.Column("approved_categories", sa.JSON(), nullable=True),
+            sa.Column(
+                "approved_source_ids",
+                sa.JSON(),
+                nullable=False,
+                server_default=sa.text("'[]'"),
+            ),
+            sa.Column(
+                "approved_categories",
+                sa.JSON(),
+                nullable=False,
+                server_default=sa.text("'[]'"),
+            ),
             sa.Column("daily_publish_limit", sa.Integer(), nullable=False),
             sa.Column("min_interval_seconds", sa.Integer(), nullable=False),
             sa.Column("pilot_channel", sa.String(length=255), nullable=True),

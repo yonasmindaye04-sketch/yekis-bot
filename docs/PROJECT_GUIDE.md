@@ -163,6 +163,8 @@ docs/                       This documentation and the audit trail
 | `publications` | One publication attempt stream per `(opportunity, channel)` | `UNIQUE (opportunity_id, channel)`; status indexed. |
 | `job_executions` | Durable background job state | `idempotency_key` unique; status indexed. |
 | `dead_letter_jobs` | Jobs that exhausted retries | One per `job_execution_id`; idempotency key indexed. |
+| `autonomy_settings` | Runtime configuration for autonomous approval and publishing | Single row (id 1). |
+| `autonomy_decisions` | Append-only log of every automatic decision | Opportunity indexed; decision, classification and time indexed. |
 
 ### 5.2 Entity relationships
 
@@ -331,6 +333,28 @@ Reviewer API key
 ```
 
 Every write is attributable to the API key's `name` in `AUTH_API_KEYS`.
+
+### 6.4b Classification and autonomous approval
+
+Every ingested post is classified before it reaches the review queue.
+
+```text
+collected post
+  -> normalize (Stage 1, original text untouched)
+  -> deterministic job detection (Stage 2)
+  -> AI classification (Stage 3, optional, structured and grounded)
+  -> deterministic risk screening (Stage 4)
+  -> merge, confidence, decision (Stage 5)
+  -> publication eligibility (Stage 6)
+  -> review queue, or automatic approval when every gate is satisfied
+```
+
+The classification is stored separately from the job category, together with
+the confidence, the evidence, the rejection reasons, the classifier version,
+the model that was used, the risk assessment, and the approval record. An
+automatic decision is also written to `autonomy_decisions` and to
+`review_events` as `auto_approval`, `auto_rejection`, `auto_quarantine`, or
+`auto_review_request`.
 
 ### 6.5 Publishing
 
@@ -502,6 +526,32 @@ Startup behavior:
 | `PUBLISHING_ENABLED` | `false` | Master switch; off by default. |
 | `PUBLISHING_ALLOWED_CHANNELS` | empty | Comma-separated allowlist; publishing fails closed when empty. |
 | `PUBLISHING_MAX_ATTEMPTS` | `3` | Attempt cap per publication. |
+
+### Classification engine
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `CLASSIFICATION_PROVIDER` | `rules` | `rules` (deterministic only), `llm` (OpenAI compatible / NVIDIA NIM), `gemini`. |
+| `CLASSIFICATION_MODEL` | empty | Model override for the classification stage. |
+
+### Autonomous approval and publishing
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `AUTONOMY_ENABLED` | `false` | Master switch for autonomous approval and publishing. |
+| `AUTONOMY_MODE` | `shadow` | `shadow`, `supervised`, or `production`. |
+| `AUTONOMY_AUTO_APPROVAL_THRESHOLD` | `0.95` | Confidence required for an automatic approval. |
+| `AUTONOMY_APPROVED_SOURCE_IDS` | empty | Comma-separated source ids allowed to publish automatically. |
+| `AUTONOMY_APPROVED_CATEGORIES` | empty | Comma-separated job categories allowed to publish automatically. |
+| `AUTONOMY_DAILY_PUBLISH_LIMIT` | `5` | Maximum messages per UTC day. |
+| `AUTONOMY_MIN_INTERVAL_SECONDS` | `900` | Minimum gap between two published messages. |
+| `AUTONOMY_PILOT_CHANNEL` | empty | Channel used in supervised mode. |
+| `AUTONOMY_TARGET_CHANNEL` | empty | Channel used in production mode. |
+| `AUTONOMY_EVALUATE_INTERVAL_SECONDS` | `300` | Beat cadence of the evaluation task. |
+| `AUTONOMOUS_PUBLISH_INTERVAL_SECONDS` | `120` | Beat cadence of the publishing task. |
+
+The dashboard writes the same values to `autonomy_settings`, which takes
+precedence over the environment defaults.
 
 ---
 
