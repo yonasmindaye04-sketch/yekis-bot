@@ -1,8 +1,17 @@
 """Reusable ingestion pipeline.
 
 The HTTP router, the Telegram collector, and the background worker all call
-``ingest_post`` so deduplication and extraction cannot drift between entry
-points.
+``ingest_post`` so deduplication, extraction, and classification cannot drift
+between entry points.
+
+Every ingested post is classified before it reaches the review queue. The
+classification is stored on the opportunity, and the initial review status
+follows from it:
+
+* a publishable candidate starts in ``pending_review``;
+* an uncertain post starts in ``needs_review``;
+* clearly non-job content is rejected automatically and kept for audit;
+* unsafe content is quarantined for a human and can never be published.
 """
 
 import hashlib
@@ -12,6 +21,13 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models import CollectedPost, Opportunity, Source
+from app.services.classification.pipeline import (
+    DECISION_AUTO_REJECT,
+    DECISION_QUARANTINE,
+    ClassificationResult,
+    classify_post,
+)
+from app.services.classification.taxonomy import PUBLISHABLE_SET, UNCERTAIN_SET
 from app.services.extractor import ExtractedOpportunity
 from app.services.llm.base import ExtractionProvider
 from app.services.llm.orchestrator import extract_with_provider
@@ -64,6 +80,34 @@ def _build_opportunity(
         review_status="needs_review" if extracted.risk_flags else "pending_review",
         extraction_method=extraction_method,
     )
+
+
+def _apply_classification(
+    opportunity: Opportunity, result: ClassificationResult
+) -> Opportunity:
+    """Store the classification verdict and derive the initial review status."""
+    from app.services.autonomy import apply_classification
+
+    apply_classification(opportunity, result)
+
+    if result.decision == DECISION_QUARANTINE:
+        opportunity.review_status = "needs_review"
+        opportunity.quarantined = True
+        opportunity.approval_method = "auto"
+        opportunity.approval_reason = "; ".join(result.rejection_reasons) or (
+            "Quarantined by the deterministic risk engine."
+        )
+    elif result.decision == DECISION_AUTO_REJECT:
+        opportunity.review_status = "rejected"
+        opportunity.approval_method = "auto"
+        opportunity.approval_reason = "; ".join(result.rejection_reasons) or (
+            "The post is not a publishable freelance or contract opportunity."
+        )
+    elif result.classification in UNCERTAIN_SET:
+        opportunity.review_status = "needs_review"
+    elif result.classification in PUBLISHABLE_SET:
+        opportunity.review_status = "pending_review"
+    return opportunity
 
 
 def ingest_post(
@@ -119,6 +163,11 @@ def ingest_post(
             extraction_method = "rules"
         opportunity = _build_opportunity(post, extracted, extraction_method)
         db.add(opportunity)
+        db.flush()
+        # The AI stage runs in the background worker: a model call must never
+        # block ingestion. The deterministic stage is fast and always runs.
+        classification = classify_post(original_text, use_ai=False)
+        _apply_classification(opportunity, classification)
         db.commit()
     except IntegrityError as exc:
         db.rollback()

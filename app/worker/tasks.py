@@ -203,3 +203,79 @@ def publish_due_task(self) -> dict:
         "error": outcome.error,
         "job_id": outcome.job_id,
     }
+
+
+@celery_app.task(bind=True, name="yekis.autonomy_evaluate")
+def autonomy_evaluate_task(self, limit: int = 50) -> dict:
+    """Classify pending opportunities and apply the autonomy decision.
+
+    This is where the AI classification stage runs: the model call must never
+    block the ingestion request path.
+    """
+    from app.services.autonomy import evaluate_pending_opportunities
+
+    task_id = getattr(getattr(self, "request", None), "id", None)
+    key = f"autonomy-evaluate:{task_id}" if task_id else None
+
+    with SessionLocal() as db:
+        def work() -> dict:
+            outcomes = evaluate_pending_opportunities(db, settings=settings, limit=limit)
+            return {
+                "evaluated": len(outcomes),
+                "decisions": [outcome.decision for outcome in outcomes],
+            }
+
+        outcome = run_job(
+            db,
+            task_name="yekis.autonomy_evaluate",
+            idempotency_key=key or "autonomy-evaluate",
+            fn=work,
+            payload={"limit": limit},
+            max_attempts=1,
+        )
+    return {
+        "status": outcome.status,
+        "attempts": outcome.attempts,
+        "value": outcome.value,
+        "error": outcome.error,
+        "job_id": outcome.job_id,
+    }
+
+
+@celery_app.task(bind=True, name="yekis.autonomous_publish")
+def autonomous_publish_task(self, limit: int = 10) -> dict:
+    """Publish eligible opportunities without human approval."""
+    from app.integrations.telegram.publisher import TelethonPublisher
+    from app.services.autonomy import run_autonomous_publish_cycle
+
+    task_id = getattr(getattr(self, "request", None), "id", None)
+    key = f"autonomous-publish:{task_id}" if task_id else None
+
+    with SessionLocal() as db:
+        def work() -> dict:
+            async def _publish():
+                publisher = TelethonPublisher()
+                try:
+                    return await run_autonomous_publish_cycle(
+                        db, publisher=publisher, settings=settings, limit=limit
+                    )
+                finally:
+                    await publisher.close()
+
+            return asyncio.run(_publish())
+
+        outcome = run_job(
+            db,
+            task_name="yekis.autonomous_publish",
+            idempotency_key=key or "autonomous-publish",
+            fn=work,
+            payload={"limit": limit},
+            max_attempts=1,
+        )
+    return {
+        "status": outcome.status,
+        "attempts": outcome.attempts,
+        "value": outcome.value,
+        "error": outcome.error,
+        "job_id": outcome.job_id,
+    }

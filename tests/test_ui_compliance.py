@@ -288,3 +288,36 @@ def test_401_response_clears_authentication_state(dashboard: str):
     branch = dashboard.split("response.status === 401", 1)
     assert len(branch) == 2, "401 handling must exist"
     assert "clearAuthState" in branch[1][:400]
+
+
+# --- Autonomous publishing control panel ---------------------------------
+
+
+def test_autonomy_panel_is_reachable_from_the_navigation(dashboard: str):
+    """Every feature must be reachable from the UI navigation (rules.md 4.3)."""
+    assert 'data-tab="autonomy"' in dashboard
+    assert 'id="tab-autonomy"' in dashboard
+    assert 'btn.dataset.tab === "autonomy"' in dashboard
+
+
+def test_autonomy_panel_exposes_every_required_control(dashboard: str):
+    required = [
+        'id="autonomyEnabled"',
+        'id="autonomyMode"',
+        'id="autonomyThreshold"',
+        'id="autonomySources"',
+        'id="autonomyCategories"',
+        'id="autonomyDailyLimit"',
+        'id="autonomyInterval"',
+        'id="autonomyCounters"',
+        'id="autonomyDecisions"',
+    ]
+    for control in required:
+        assert control in dashboard, f"missing autonomy control {control}"
+
+
+def test_review_queue_exposes_classification_filters(dashboard: str):
+    assert 'id="reviewGroup"' in dashboard
+    for group in ("freelance", "employment", "education", "announcement", "suspicious",
+                  "ambiguous"):
+        assert f'value="{group}"' in dashboard

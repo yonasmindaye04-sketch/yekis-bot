@@ -627,6 +627,7 @@
         <button data-tab="ingest">Ingest Post</button>
         <button data-tab="sources">Sources <span class="badge-count" id="badgeSources">-</span></button>
         <button data-tab="publications">Publications</button>
+        <button data-tab="autonomy">Autonomy</button>
         <button data-tab="analytics">Analytics & Insights</button>
       </nav>
 
@@ -650,6 +651,18 @@
                 <select id="reviewRisk" style="width: 170px;">
                   <option value="false">all items</option>
                   <option value="true">Risk-flagged only</option>
+                </select>
+              </div>
+              <div>
+                <label>Classification</label>
+                <select id="reviewGroup" style="width: 170px;">
+                  <option value="">all classifications</option>
+                  <option value="freelance">Freelance and contract</option>
+                  <option value="employment">Permanent employment</option>
+                  <option value="education">Education, tips, training</option>
+                  <option value="announcement">Announcements and news</option>
+                  <option value="suspicious">Suspicious and unsafe</option>
+                  <option value="ambiguous">Ambiguous</option>
                 </select>
               </div>
               <div>
@@ -786,6 +799,91 @@
           </div>
         </div>
         <div id="publicationList"><div class="loading">Loading publication history…</div></div>
+      </section>
+
+      <!-- TAB: AUTONOMOUS PUBLISHING -->
+      <section id="tab-autonomy">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <h3 style="margin: 0 0 4px; font-size: 15px;">Autonomous Publishing Control Panel</h3>
+              <span style="color: var(--text-muted); font-size: 12px;">
+                Approve and publish qualified freelance opportunities without a manual click.
+                The deterministic risk engine always has the final word.
+              </span>
+            </div>
+            <div class="actions">
+              <button id="refreshAutonomyBtn">Refresh</button>
+              <button class="primary" id="saveAutonomyBtn">Save Settings</button>
+            </div>
+          </div>
+
+          <div class="grid-2">
+            <div>
+              <label for="autonomyEnabled">Autonomous Publishing</label>
+              <select id="autonomyEnabled">
+                <option value="false">Disabled</option>
+                <option value="true">Enabled</option>
+              </select>
+            </div>
+            <div>
+              <label for="autonomyMode">Operating Mode</label>
+              <select id="autonomyMode">
+                <option value="shadow">Shadow (record only, never publish)</option>
+                <option value="supervised">Supervised (pilot channel)</option>
+                <option value="production">Production (live channel)</option>
+              </select>
+            </div>
+            <div>
+              <label for="autonomyThreshold">Automatic Approval Threshold</label>
+              <input id="autonomyThreshold" type="number" step="0.01" min="0.5" max="1" value="0.95">
+            </div>
+            <div>
+              <label for="autonomyDailyLimit">Daily Publishing Limit</label>
+              <input id="autonomyDailyLimit" type="number" step="1" min="0" max="500" value="5">
+            </div>
+            <div>
+              <label for="autonomyInterval">Minimum Interval Between Posts (minutes)</label>
+              <input id="autonomyInterval" type="number" step="1" min="0" max="1440" value="15">
+            </div>
+            <div>
+              <label for="autonomyPilotChannel">Pilot Channel (supervised mode)</label>
+              <input id="autonomyPilotChannel" placeholder="e.g. @yekis_pilot">
+            </div>
+            <div>
+              <label for="autonomyTargetChannel">Target Channel (production mode)</label>
+              <input id="autonomyTargetChannel" placeholder="e.g. @yekis_channel">
+            </div>
+            <div>
+              <label for="autonomyCategories">Approved Job Categories (comma separated)</label>
+              <input id="autonomyCategories" placeholder="software, design, writing">
+            </div>
+          </div>
+
+          <div style="margin-top: 16px;">
+            <label for="autonomySources">Approved Sources for Autonomous Publishing</label>
+            <select id="autonomySources" multiple size="4"></select>
+            <span style="color: var(--text-muted); font-size: 11px; display: block; margin-top: 6px;">
+              Hold Ctrl or Command to select more than one source. Only selected sources may be published automatically.
+            </span>
+          </div>
+
+          <div id="autonomyStatus" style="margin-top: 16px; font-size: 12px; color: var(--text-muted);"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h3 style="margin: 0; font-size: 15px;">Decision Counters</h3>
+          </div>
+          <div id="autonomyCounters"><div class="loading">Loading counters…</div></div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h3 style="margin: 0; font-size: 15px;">Automatic Decision Audit History</h3>
+          </div>
+          <div id="autonomyDecisions"><div class="loading">Loading decisions…</div></div>
+        </div>
       </section>
 
       <!-- TAB: ANALYTICS & INSIGHTS -->
@@ -953,15 +1051,30 @@
         <div class="item-meta">
           <span><strong>Type:</strong> ${esc(item.opportunity_type)}</span>
           <span class="meta-sep"></span>
+          <span><strong>Classification:</strong> ${esc(item.classification || "unclassified")}</span>
+          <span class="meta-sep"></span>
+          <span><strong>Confidence:</strong> ${Math.round((item.classification_confidence || 0) * 100)}%</span>
+          <span class="meta-sep"></span>
           <span><strong>Category:</strong> ${esc(item.category || "uncategorized")}</span>
           <span class="meta-sep"></span>
           <span><strong>Compensation:</strong> ${esc(money(item))}</span>
           <span class="meta-sep"></span>
           <span><strong>Quality:</strong> ${item.quality_score}/100</span>
           <span class="meta-sep"></span>
-          <span><strong>Risk:</strong> ${item.risk_score}</span>
+          <span><strong>Risk:</strong> ${esc(item.risk_level || "none")} (${item.risk_score})</span>
           ${item.remote ? `<span class="meta-sep"></span> <span class="badge ok">Remote</span>` : ""}
         </div>
+
+        ${(item.classification_reasons && item.classification_reasons.length) || (item.approval_reason) ? `
+        <div style="font-size:12px; color:var(--text-muted); margin-top:8px;">
+          ${item.approval_reason ? `<div><strong>Decision:</strong> ${esc(item.approval_reason)}</div>` : ""}
+          ${(item.classification_reasons || []).map((reason) => `<div>${esc(reason)}</div>`).join("")}
+        </div>` : ""}
+
+        ${(item.classification_evidence && item.classification_evidence.length) ? `
+        <div style="font-size:12px; color:var(--text-muted); margin-top:6px;">
+          ${item.classification_evidence.map((line) => `<div>${esc(line)}</div>`).join("")}
+        </div>` : ""}
 
         ${isFlagged ? `<div style="margin: 8px 0;">${riskPills}</div>` : ""}
 
@@ -1059,6 +1172,8 @@
         const st = $("reviewStatus").value;
         if (st) params.set("status", st);
         if ($("reviewRisk").value === "true") params.set("risk_only", "true");
+        const group = $("reviewGroup") ? $("reviewGroup").value : "";
+        if (group) params.set("group", group);
 
         const items = await api("/api/v1/opportunities?" + params.toString());
         state.opportunities = items;
@@ -1504,6 +1619,161 @@
       }
     }
 
+    // Autonomous Publishing Tab
+    async function loadAutonomy() {
+      const status = $("autonomyStatus");
+      try {
+        const [settings, overview, decisions, sources] = await Promise.all([
+          api("/api/v1/autonomy/settings"),
+          api("/api/v1/autonomy/overview"),
+          api("/api/v1/autonomy/decisions?limit=50"),
+          api("/api/v1/sources?limit=200")
+        ]);
+
+        $("autonomyEnabled").value = settings.enabled ? "true" : "false";
+        $("autonomyMode").value = settings.mode || "shadow";
+        $("autonomyThreshold").value = settings.auto_approval_threshold;
+        $("autonomyDailyLimit").value = settings.daily_publish_limit;
+        $("autonomyInterval").value = Math.round((settings.min_interval_seconds || 0) / 60);
+        $("autonomyPilotChannel").value = settings.pilot_channel || "";
+        $("autonomyTargetChannel").value = settings.target_channel || "";
+        $("autonomyCategories").value = (settings.approved_categories || []).join(", ");
+
+        const select = $("autonomySources");
+        select.innerHTML = sources.map((s) => `
+          <option value="${s.id}" ${(settings.approved_source_ids || []).includes(s.id) ? "selected" : ""}>
+            #${s.id} ${esc(s.name)}${s.is_active ? "" : " (inactive)"}
+          </option>`).join("") || '<option value="">No sources registered</option>';
+
+        const modeLabel = settings.mode === "shadow"
+          ? "Shadow mode: decisions are recorded, nothing is published."
+          : (settings.mode === "supervised"
+            ? "Supervised mode: automatic publishing targets the pilot channel."
+            : "Production mode: automatic publishing targets the live channel.");
+        status.innerHTML = `
+          <span class="badge ${settings.enabled ? "approved" : "inactive"}">
+            ${settings.enabled ? "enabled" : "disabled"}
+          </span>
+          <span style="margin-left: 10px;">${esc(modeLabel)}</span>
+          <span style="margin-left: 10px;">Configuration source: ${esc(settings.source)}</span>
+          ${settings.updated_at ? `<span style="margin-left: 10px;">Last change: ${esc(String(settings.updated_at))}</span>` : ""}
+        `;
+
+        renderAutonomyCounters(overview);
+        renderAutonomyDecisions(decisions);
+      } catch (err) {
+        status.innerHTML = `<span class="badge failed">error</span> ${esc(err.message)}`;
+        if (err.status === 401) showAuth();
+      }
+    }
+
+    function renderAutonomyCounters(data) {
+      $("autonomyCounters").innerHTML = `
+        <div class="kpi-grid">
+          <div class="kpi-card">
+            <div class="kpi-label">Auto Approved</div>
+            <div class="kpi-value ok">${data.auto_approved || 0}</div>
+            <div style="font-size:11px; color:var(--text-dim); margin-top:2px;">Approved by the engine</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Human Review</div>
+            <div class="kpi-value warn">${data.human_review || 0}</div>
+            <div style="font-size:11px; color:var(--text-dim); margin-top:2px;">Waiting for a person</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Rejected</div>
+            <div class="kpi-value">${data.rejected || 0}</div>
+            <div style="font-size:11px; color:var(--text-dim); margin-top:2px;">Not publishable</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Quarantined</div>
+            <div class="kpi-value warn">${data.quarantined || 0}</div>
+            <div style="font-size:11px; color:var(--text-dim); margin-top:2px;">Blocked by risk engine</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Published</div>
+            <div class="kpi-value ok">${data.published || 0}</div>
+            <div style="font-size:11px; color:var(--text-dim); margin-top:2px;">Messages sent</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Failed</div>
+            <div class="kpi-value warn">${data.failed || 0}</div>
+            <div style="font-size:11px; color:var(--text-dim); margin-top:2px;">Send failures</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Shadow Approvals</div>
+            <div class="kpi-value">${data.would_auto_approve || 0}</div>
+            <div style="font-size:11px; color:var(--text-dim); margin-top:2px;">Would have been approved</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Shadow Rejections</div>
+            <div class="kpi-value">${data.would_auto_reject || 0}</div>
+            <div style="font-size:11px; color:var(--text-dim); margin-top:2px;">Would have been rejected</div>
+          </div>
+        </div>`;
+    }
+
+    function renderAutonomyDecisions(decisions) {
+      const list = $("autonomyDecisions");
+      if (!decisions.length) {
+        list.innerHTML = '<div class="empty">No automatic decisions recorded yet.</div>';
+        return;
+      }
+      list.innerHTML = decisions.map((d) => `
+        <div class="item">
+          <div class="row" style="justify-content: space-between;">
+            <h3 style="font-size:14px;">Opportunity #${d.opportunity_id} &middot; ${esc(d.decision)}</h3>
+            <div class="row" style="gap:6px;">
+              ${badge(d.mode, "pending_review")}
+              <span class="badge">${esc(d.classification || "unclassified")}</span>
+            </div>
+          </div>
+          <div class="item-meta">
+            <span><strong>Confidence:</strong> ${Math.round((d.confidence || 0) * 100)}%</span>
+            <span class="meta-sep"></span>
+            <span><strong>Threshold:</strong> ${Math.round((d.threshold || 0) * 100)}%</span>
+            <span class="meta-sep"></span>
+            <span><strong>Actor:</strong> ${esc(d.actor)}</span>
+            <span class="meta-sep"></span>
+            <span><strong>When:</strong> ${esc(String(d.created_at || ""))}</span>
+          </div>
+          ${d.reason ? `<div style="font-size:12px; color:var(--text-muted); margin-top:6px;">${esc(d.reason)}</div>` : ""}
+        </div>`).join("");
+    }
+
+    async function saveAutonomy() {
+      const btn = $("saveAutonomyBtn");
+      btn.disabled = true;
+      try {
+        const selected = Array.from($("autonomySources").selectedOptions).map((o) => Number(o.value));
+        const categories = $("autonomyCategories").value
+          .split(",")
+          .map((v) => v.trim().toLowerCase())
+          .filter(Boolean);
+        const payload = {
+          enabled: $("autonomyEnabled").value === "true",
+          mode: $("autonomyMode").value,
+          auto_approval_threshold: Number($("autonomyThreshold").value),
+          daily_publish_limit: Number($("autonomyDailyLimit").value),
+          min_interval_seconds: Math.round(Number($("autonomyInterval").value) * 60),
+          pilot_channel: $("autonomyPilotChannel").value.trim() || null,
+          target_channel: $("autonomyTargetChannel").value.trim() || null,
+          approved_source_ids: selected.filter((id) => Number.isFinite(id)),
+          approved_categories: categories
+        };
+        await api("/api/v1/autonomy/settings", {
+          method: "PATCH",
+          body: JSON.stringify(payload)
+        });
+        toast("Autonomous publishing settings saved.");
+        await loadAutonomy();
+      } catch (err) {
+        toast(err.message, true);
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
     // Analytics Tab
     async function loadAnalytics() {
       const container = $("analyticsBody");
@@ -1732,6 +2002,7 @@
           if (btn.dataset.tab === "sources") loadSources();
           if (btn.dataset.tab === "ingest") loadSourcesForIngest();
           if (btn.dataset.tab === "publications") loadPublications();
+          if (btn.dataset.tab === "autonomy") loadAutonomy();
           if (btn.dataset.tab === "analytics") loadAnalytics();
         });
       });
@@ -1783,6 +2054,9 @@
     $("refreshSourcesBtn").addEventListener("click", loadSources);
     $("createSourceBtn").addEventListener("click", createSource);
     $("refreshPublicationsBtn").addEventListener("click", loadPublications);
+    $("refreshAutonomyBtn").addEventListener("click", loadAutonomy);
+    $("saveAutonomyBtn").addEventListener("click", saveAutonomy);
+    if ($("reviewGroup")) $("reviewGroup").addEventListener("change", loadReview);
     $("refreshAnalyticsBtn").addEventListener("click", loadAnalytics);
 
     // Delegate opportunity card actions

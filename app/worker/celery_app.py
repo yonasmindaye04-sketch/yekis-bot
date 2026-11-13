@@ -41,6 +41,17 @@ celery_app.conf.beat_schedule = {
         "task": "yekis.publish_due",
         "schedule": 60,
     },
+    # Autonomous pipeline. The evaluation task classifies pending posts and
+    # records the decision; the publish task publishes only what the autonomy
+    # engine approved. Both fail closed when autonomy is disabled.
+    "autonomy-evaluate": {
+        "task": "yekis.autonomy_evaluate",
+        "schedule": settings.autonomy_evaluate_interval_seconds,
+    },
+    "autonomous-publish": {
+        "task": "yekis.autonomous_publish",
+        "schedule": settings.autonomous_publish_interval_seconds,
+    },
 }
 
 __all__ = ["celery_app"]

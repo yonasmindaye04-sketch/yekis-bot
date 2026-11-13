@@ -92,6 +92,35 @@ class Settings(BaseSettings):
     publishing_max_attempts: int = 3
     platform_url: str = "https://yekis.com"
 
+    # Classification engine (Stage 3 of the classification pipeline).
+    # "rules" means deterministic only: no model call and therefore no post
+    # can reach the automatic approval threshold. "llm" is any
+    # OpenAI-compatible endpoint (including NVIDIA NIM) and "gemini" is the
+    # Google AI Studio transport. The AI stage only ever proposes a
+    # classification; it never lowers a deterministic risk verdict.
+    classification_provider: str = "rules"
+    # Optional model override for the classification stage. Empty means the
+    # provider default (LLM_MODEL / GEMINI_MODEL).
+    classification_model: str = ""
+
+    # Autonomous approval and publishing. Disabled by default and defaulting
+    # to shadow mode: nothing is published without an explicit owner action.
+    autonomy_enabled: bool = False
+    autonomy_mode: str = "shadow"
+    autonomy_auto_approval_threshold: float = 0.95
+    # Comma-separated source ids that may be published autonomously.
+    autonomy_approved_source_ids: str = ""
+    # Comma-separated job categories that may be published autonomously.
+    autonomy_approved_categories: str = ""
+    autonomy_daily_publish_limit: int = 5
+    autonomy_min_interval_seconds: int = 900
+    # Channel used in supervised mode (pilot) and in production mode.
+    autonomy_pilot_channel: str = ""
+    autonomy_target_channel: str = ""
+    # Beat cadence for the autonomous pipeline.
+    autonomy_evaluate_interval_seconds: int = 300
+    autonomous_publish_interval_seconds: int = 120
+
     # Admin Alerts
     admin_alerts_enabled: bool = False
     admin_alert_chat_id: str = ""
@@ -136,6 +165,29 @@ class Settings(BaseSettings):
     @property
     def cors_origin_list(self) -> list[str]:
         return [value.strip() for value in self.cors_origins.split(",") if value.strip()]
+
+    @property
+    def autonomy_source_id_list(self) -> list[int]:
+        """Source ids that are approved for autonomous publishing."""
+        result: list[int] = []
+        for value in self.autonomy_approved_source_ids.split(","):
+            value = value.strip()
+            if not value:
+                continue
+            try:
+                result.append(int(value))
+            except ValueError:
+                continue
+        return result
+
+    @property
+    def autonomy_category_list(self) -> list[str]:
+        """Job categories that are approved for autonomous publishing."""
+        return [
+            value.strip().lower()
+            for value in self.autonomy_approved_categories.split(",")
+            if value.strip()
+        ]
 
 
 settings = Settings()  # type: ignore[call-arg]

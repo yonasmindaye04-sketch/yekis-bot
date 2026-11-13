@@ -11,6 +11,7 @@ from app.config import settings
 from app.db import Base, engine
 from app.routers import (
     analytics,
+    autonomy,
     health,
     ingestion,
     opportunities,
@@ -64,6 +65,7 @@ app.include_router(ingestion.router, prefix=settings.api_prefix)
 app.include_router(opportunities.router, prefix=settings.api_prefix)
 app.include_router(publications.router, prefix=settings.api_prefix)
 app.include_router(analytics.router, prefix=settings.api_prefix)
+app.include_router(autonomy.router, prefix=settings.api_prefix)
 app.mount("/admin", StaticFiles(directory=STATIC_DIR, html=True), name="admin")
 
 

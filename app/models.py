@@ -86,6 +86,43 @@ class Opportunity(Base):
     reviewed_by: Mapped[str | None] = mapped_column(String(120))
     reviewer_note: Mapped[str | None] = mapped_column(Text)
 
+    # --- Classification engine (separate from the job category) ----------
+    # `category` describes the subject matter of the work. `classification`
+    # describes what the post actually is. A post can be classified
+    # "educational_content" and still be categorised "education".
+    classification: Mapped[str] = mapped_column(
+        String(40), default="insufficient_information", index=True
+    )
+    engagement_type: Mapped[str | None] = mapped_column(String(40))
+    is_genuine_opportunity: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_publishable: Mapped[bool] = mapped_column(Boolean, default=False)
+    classification_confidence: Mapped[float] = mapped_column(Float, default=0.0)
+    classification_evidence: Mapped[list] = mapped_column(JSON, default=list)
+    classification_reasons: Mapped[list] = mapped_column(JSON, default=list)
+    classification_method: Mapped[str] = mapped_column(
+        String(30), default="deterministic"
+    )
+    classifier_version: Mapped[str | None] = mapped_column(String(30))
+    model_provider: Mapped[str | None] = mapped_column(String(30))
+    model_name: Mapped[str | None] = mapped_column(String(120))
+    risk_level: Mapped[str] = mapped_column(String(20), default="none", index=True)
+    risk_assessment: Mapped[dict] = mapped_column(JSON, default=dict)
+
+    # --- Approval record --------------------------------------------------
+    # approval_method is "manual" for a human decision and "auto" for a
+    # decision taken by the autonomy engine.
+    approval_method: Mapped[str | None] = mapped_column(String(20))
+    approval_reason: Mapped[str | None] = mapped_column(Text)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    approved_by: Mapped[str | None] = mapped_column(String(120))
+
+    # A quarantined opportunity is kept for audit but can never be published.
+    quarantined: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    # --- Extracted engagement details -------------------------------------
+    deadline: Mapped[str | None] = mapped_column(String(120))
+    application_url: Mapped[str | None] = mapped_column(String(1000))
+
     post: Mapped[CollectedPost] = relationship(back_populates="opportunity", lazy="joined")
     events: Mapped[list["ReviewEvent"]] = relationship(
         back_populates="opportunity", order_by="ReviewEvent.id"
@@ -127,8 +164,67 @@ class Publication(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow
     )
+    # Autonomous publications are re-checked at send time and are subject to
+    # the daily limit and the minimum interval between posts.
+    is_autonomous: Mapped[bool] = mapped_column(Boolean, default=False)
+    autonomy_mode: Mapped[str | None] = mapped_column(String(20))
+    content_hash: Mapped[str | None] = mapped_column(String(64), index=True)
 
     opportunity: Mapped[Opportunity] = relationship(back_populates="publications")
+
+
+class AutonomySettings(Base):
+    """Runtime configuration for the autonomous approval and publishing engine.
+
+    The environment provides the defaults; this single-row table holds the
+    dashboard overrides. Row id 1 is the only row that is ever used.
+    """
+
+    __tablename__ = "autonomy_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    mode: Mapped[str] = mapped_column(String(20), default="shadow")
+    auto_approval_threshold: Mapped[float] = mapped_column(Float, default=0.95)
+    approved_source_ids: Mapped[list] = mapped_column(JSON, default=list)
+    approved_categories: Mapped[list] = mapped_column(JSON, default=list)
+    daily_publish_limit: Mapped[int] = mapped_column(Integer, default=5)
+    min_interval_seconds: Mapped[int] = mapped_column(Integer, default=900)
+    pilot_channel: Mapped[str | None] = mapped_column(String(255))
+    target_channel: Mapped[str | None] = mapped_column(String(255))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
+    updated_by: Mapped[str | None] = mapped_column(String(120))
+
+
+class AutonomyDecision(Base):
+    """Append-only log of every automatic decision.
+
+    A row is written for every autonomous approval, rejection, quarantine,
+    review request, and skipped publication. Rows are never updated or
+    deleted: they are the audit trail that explains why the system did what
+    it did.
+    """
+
+    __tablename__ = "autonomy_decisions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    opportunity_id: Mapped[int] = mapped_column(
+        ForeignKey("opportunities.id"), nullable=False, index=True
+    )
+    source_id: Mapped[int | None] = mapped_column(Integer, index=True)
+    decision: Mapped[str] = mapped_column(String(30), nullable=False, index=True)
+    classification: Mapped[str | None] = mapped_column(String(40), index=True)
+    confidence: Mapped[float] = mapped_column(Float, default=0.0)
+    threshold: Mapped[float] = mapped_column(Float, default=0.0)
+    mode: Mapped[str] = mapped_column(String(20), default="shadow")
+    actor: Mapped[str] = mapped_column(String(120), nullable=False)
+    reason: Mapped[str | None] = mapped_column(Text)
+    details: Mapped[dict | None] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, index=True
+    )
 
 
 class ReviewEvent(Base):
