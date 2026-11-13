@@ -24,20 +24,64 @@ STATIC_DIR = Path(__file__).parent / "static" / "admin"
 IS_DEVELOPMENT = settings.app_env == "development"
 
 
+def _ensure_schema(eng) -> None:
+    try:
+        import sqlalchemy as sa
+        Base.metadata.create_all(bind=eng)
+        inspector = sa.inspect(eng)
+        existing_tables = set(inspector.get_table_names())
+        if "opportunities" in existing_tables:
+            existing_opp_cols = {c["name"] for c in inspector.get_columns("opportunities")}
+            opp_columns = [
+                ("client_name", "VARCHAR(250)", None),
+                ("classification", "VARCHAR(40)", "'insufficient_information'"),
+                ("engagement_type", "VARCHAR(40)", None),
+                ("is_genuine_opportunity", "BOOLEAN", "false"),
+                ("is_publishable", "BOOLEAN", "false"),
+                ("classification_confidence", "FLOAT", "0.0"),
+                ("classification_evidence", "JSON", "'[]'"),
+                ("classification_reasons", "JSON", "'[]'"),
+                ("classification_method", "VARCHAR(30)", "'deterministic'"),
+                ("classifier_version", "VARCHAR(30)", None),
+                ("model_provider", "VARCHAR(30)", None),
+                ("model_name", "VARCHAR(120)", None),
+                ("risk_level", "VARCHAR(20)", "'none'"),
+                ("risk_assessment", "JSON", "'{}'"),
+                ("approval_method", "VARCHAR(20)", None),
+                ("approval_reason", "TEXT", None),
+                ("approved_at", "TIMESTAMPTZ", None),
+                ("approved_by", "VARCHAR(120)", None),
+                ("quarantined", "BOOLEAN", "false"),
+                ("deadline", "VARCHAR(120)", None),
+                ("application_url", "VARCHAR(1000)", None),
+            ]
+            with eng.begin() as conn:
+                for name, col_type, default in opp_columns:
+                    if name not in existing_opp_cols:
+                        default_clause = f" DEFAULT {default}" if default is not None else ""
+                        conn.execute(sa.text(f"ALTER TABLE opportunities ADD COLUMN {name} {col_type}{default_clause}"))
+
+        if "publications" in existing_tables:
+            existing_pub_cols = {c["name"] for c in inspector.get_columns("publications")}
+            pub_columns = [
+                ("is_autonomous", "BOOLEAN", "false"),
+                ("autonomy_mode", "VARCHAR(20)", None),
+                ("content_hash", "VARCHAR(64)", None),
+            ]
+            with eng.begin() as conn:
+                for name, col_type, default in pub_columns:
+                    if name not in existing_pub_cols:
+                        default_clause = f" DEFAULT {default}" if default is not None else ""
+                        conn.execute(sa.text(f"ALTER TABLE publications ADD COLUMN {name} {col_type}{default_clause}"))
+    except Exception as exc:
+        logging.getLogger(__name__).warning("Schema auto-ensure failed: %s", exc)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logging.basicConfig(level=settings.log_level.upper())
     validate_security_config(settings)
-    if settings.auto_create_schema and IS_DEVELOPMENT:
-        Base.metadata.create_all(bind=engine)
-    try:
-        from sqlalchemy import text
-        with engine.begin() as conn:
-            conn.execute(
-                text("ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS client_name VARCHAR(250);")
-            )
-    except Exception:
-        pass
+    _ensure_schema(engine)
     yield
 
 
