@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import sys
+from datetime import UTC, datetime
 
 from app.config import settings
 from app.db import SessionLocal
@@ -36,37 +37,66 @@ def main() -> int:
         print(f"Broadcast processing complete: {len(published)} items published.")
 
         # 3. Autonomous evaluation and auto-publishing cycle
+        #
+        # The autonomy engine is configured through the `autonomy_settings`
+        # table (owned by the dashboard) and through the environment. It is off
+        # by default: in shadow mode the engine only records what it would
+        # approve and publishes nothing.
         try:
             from app.services.autonomy import (
                 evaluate_pending_opportunities,
+                publishing_blocked,
                 resolve_config,
                 run_autonomous_publish_cycle,
             )
 
             config = resolve_config(db, settings)
-            if config.enabled and config.mode in ("supervised", "production"):
-                print(f"Autonomy active (mode={config.mode}): evaluating pending opportunities...")
-                outcomes = evaluate_pending_opportunities(db, settings=settings)
-                print(f"Evaluated {len(outcomes)} opportunities: {[o.decision for o in outcomes]}")
+            if config.enabled:
+                # Shadow mode records what the engine would approve. The
+                # supervised and the production modes additionally publish.
+                will_publish = config.mode in ("supervised", "production")
+                blocked = publishing_blocked(db, config, datetime.now(UTC))
+                if will_publish and blocked:
+                    print(f"Autonomy is enabled but publishing is blocked: {blocked}")
+                else:
+                    print(
+                        f"Autonomy active (mode={config.mode}, "
+                        f"channel={config.channel}): evaluating pending opportunities..."
+                    )
+                    outcomes = evaluate_pending_opportunities(
+                        db,
+                        settings=settings,
+                        limit=settings.autonomy_evaluate_limit,
+                    )
+                    print(
+                        f"Evaluated {len(outcomes)} opportunities: "
+                        f"{[o.decision for o in outcomes]}"
+                    )
 
-                async def _auto_publish():
-                    pub = TelethonPublisher(settings=settings)
-                    try:
-                        return await run_autonomous_publish_cycle(
-                            db, publisher=pub, settings=settings
-                        )
-                    finally:
-                        await pub.close()
+                if will_publish and not blocked:
 
-                auto_res = asyncio.run(_auto_publish())
-                print(f"Autonomous publish cycle result: {auto_res}")
+                    async def _auto_publish():
+                        pub = TelethonPublisher(settings=settings)
+                        try:
+                            return await run_autonomous_publish_cycle(
+                                db, publisher=pub, settings=settings
+                            )
+                        finally:
+                            await pub.close()
+
+                    auto_res = asyncio.run(_auto_publish())
+                    print(f"Autonomous publish cycle result: {auto_res}")
             else:
                 print(
-                    "Autonomy inactive or in shadow mode "
-                    f"(enabled={config.enabled}, mode={config.mode})."
+                    "Autonomy inactive (enabled=False). Enable it from the admin "
+                    "dashboard or with AUTONOMY_ENABLED=true."
                 )
         except Exception as auto_exc:
-            print(f"Notice: Autonomy cycle encountered: {auto_exc}", file=sys.stderr)
+            print(
+                f"ERROR: autonomy cycle failed and nothing was published: {auto_exc}",
+                file=sys.stderr,
+            )
+            raise
         return 0 if outcome.status in ("succeeded", "completed", "skipped") else 1
     except Exception as exc:
         print(f"Error during collection/publication execution: {exc}", file=sys.stderr)

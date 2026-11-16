@@ -313,6 +313,7 @@ class AutonomyOverviewRead(BaseModel):
     daily_publish_limit: int
     min_interval_seconds: int
     channel: str | None
+    publishing_blocked_reason: str | None = None
     auto_approved: int
     human_review: int
     rejected: int

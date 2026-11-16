@@ -163,6 +163,55 @@ publishing immediately from the dashboard (set *Autonomous Publishing* to
 The dashboard overrides win over the environment. The environment provides the
 defaults for a fresh installation.
 
+## 4.3 Enabling automatic publishing on the scheduled job (the actual fix)
+
+The scheduled scanner is `.github/workflows/collector.yml`. It runs hourly,
+migrates the schema, seeds the sources, and then calls
+`python -m scripts.run_collection`. That script now also runs the autonomy
+cycle: it evaluates waiting opportunities and, in the supervised or the
+production mode, publishes what the engine approved.
+
+**Every one of these steps is required.** Missing any one of them is why the
+channel stays quiet.
+
+| # | Step | Where | Symptom when missing |
+|---|---|---|---|
+| 1 | A model provider for the classification stage | secret `CLASSIFICATION_PROVIDER` (`llm` or `gemini`) | Every post stays at confidence `0.90` and goes to human review. Nothing is ever auto-approved. |
+| 2 | A reachable model endpoint | secret `LLM_BASE_URL` | The app falls back to `https://api.openai.com/v1`; the NVIDIA key is rejected with 401 and the pipeline degrades to rules. |
+| 3 | The engine enabled | secret `AUTONOMY_ENABLED=true` **and** the dashboard switch | `run_collection.py` prints "Autonomy inactive" and skips the cycle. |
+| 4 | A mode that publishes | `AUTONOMY_MODE=supervised` or `production` | Shadow mode records decisions but never publishes. |
+| 5 | A target channel | secret `AUTONOMY_TARGET_CHANNEL` | `publishing_blocked()` returns "no channel is configured for production mode". |
+| 6 | The channel allowlisted | `PUBLISHING_ALLOWED_CHANNELS=@yekis_channel` | The send fails closed with "channel is not allowlisted". |
+| 7 | Approved sources | secret `AUTONOMY_APPROVED_SOURCE_IDS` (for example `1,2`) | Every opportunity is rejected with "the source is not approved for autonomous publishing". |
+| 8 | A sane threshold | `AUTONOMY_AUTO_APPROVAL_THRESHOLD=0.95` | A higher threshold means nothing can qualify. |
+
+The source ids are the ids of the seeded rows (`afriwork`, `hahu jobs`). Read
+them from the dashboard (*Sources* tab) or from
+`SELECT id, name FROM sources ORDER BY id;`.
+
+Steps 3, 4, 5 and 7 can also be set from the dashboard. The dashboard writes
+them to `autonomy_settings`, and that row takes precedence over the
+environment, so a dashboard change is picked up by the next scheduled run
+without touching the secrets.
+
+Verify the configuration of the scheduled job:
+
+```bash
+curl -H "X-API-Key: $YI_ADMIN_KEY" http://localhost:8100/api/v1/autonomy/overview
+```
+
+The `publishing_blocked_reason` field states exactly why nothing is being
+published right now. The same reason is printed in the workflow log.
+
+Operational notes:
+
+- `AUTONOMY_EVALUATE_LIMIT` (default 5) bounds how many posts are classified
+  per run. A model call can take a minute or more, so the batch must stay
+  small enough for the job timeout.
+- Shadow mode also evaluates now, so the decision log fills with real
+  `would_auto_approve` rows that can be compared with the human decisions.
+- The workflow timeout was raised from 15 to 30 minutes for the same reason.
+
 ## 5. Rollback
 
 ### 5.1 Emergency stop (no redeploy)

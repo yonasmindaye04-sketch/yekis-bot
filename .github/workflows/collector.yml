@@ -10,7 +10,7 @@ jobs:
   collect:
     name: Scrape & Extract Opportunities
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
 
     steps:
       - name: Checkout Code
@@ -57,9 +57,28 @@ jobs:
           TELEGRAM_FETCH_LIMIT: "15"
           ADMIN_ALERTS_ENABLED: "false"
           EXTRACTION_PROVIDER: ${{ secrets.EXTRACTION_PROVIDER }}
-          LLM_API_BASE: ${{ secrets.LLM_API_BASE }}
+          # The application reads LLM_BASE_URL (field llm_base_url). The old
+          # LLM_API_BASE name was never read, so every request fell back to
+          # https://api.openai.com/v1 and the NVIDIA key never reached NIM.
+          LLM_BASE_URL: ${{ secrets.LLM_BASE_URL || secrets.LLM_API_BASE }}
           LLM_MODEL: ${{ secrets.LLM_MODEL }}
           LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+          # Classification stage. Without a model no post can reach the
+          # automatic approval threshold, so nothing is published.
+          CLASSIFICATION_PROVIDER: ${{ secrets.CLASSIFICATION_PROVIDER }}
+          CLASSIFICATION_MODEL: ${{ secrets.CLASSIFICATION_MODEL }}
+          # Autonomous approval and publishing. Every value is optional: a
+          # missing secret keeps the safe default (disabled).
+          AUTONOMY_ENABLED: ${{ secrets.AUTONOMY_ENABLED }}
+          AUTONOMY_MODE: ${{ secrets.AUTONOMY_MODE }}
+          AUTONOMY_TARGET_CHANNEL: ${{ secrets.AUTONOMY_TARGET_CHANNEL }}
+          AUTONOMY_PILOT_CHANNEL: ${{ secrets.AUTONOMY_PILOT_CHANNEL }}
+          AUTONOMY_APPROVED_SOURCE_IDS: ${{ secrets.AUTONOMY_APPROVED_SOURCE_IDS }}
+          AUTONOMY_APPROVED_CATEGORIES: ${{ secrets.AUTONOMY_APPROVED_CATEGORIES }}
+          AUTONOMY_AUTO_APPROVAL_THRESHOLD: ${{ secrets.AUTONOMY_AUTO_APPROVAL_THRESHOLD }}
+          AUTONOMY_DAILY_PUBLISH_LIMIT: ${{ secrets.AUTONOMY_DAILY_PUBLISH_LIMIT }}
+          AUTONOMY_MIN_INTERVAL_SECONDS: ${{ secrets.AUTONOMY_MIN_INTERVAL_SECONDS }}
+          AUTONOMY_EVALUATE_LIMIT: ${{ secrets.AUTONOMY_EVALUATE_LIMIT }}
           PUBLISHING_ENABLED: "true"
           PUBLISHING_ALLOWED_CHANNELS: "@yekis_channel"
         run: |

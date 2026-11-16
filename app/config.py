@@ -1,4 +1,4 @@
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -120,6 +120,10 @@ class Settings(BaseSettings):
     # Beat cadence for the autonomous pipeline.
     autonomy_evaluate_interval_seconds: int = 300
     autonomous_publish_interval_seconds: int = 120
+    # Maximum number of opportunities the scheduled job classifies in one run.
+    # A model call can take a minute or more, so the batch has to stay small
+    # enough to finish inside the job timeout.
+    autonomy_evaluate_limit: int = 5
 
     # Admin Alerts
     admin_alerts_enabled: bool = False
@@ -131,6 +135,25 @@ class Settings(BaseSettings):
     marketplace_webhook_secret: str = ""
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _ignore_blank_environment_values(cls, values):
+        """Treat an empty environment variable as "not set".
+
+        A secret that exists but is empty is common in scheduled jobs. Passing
+        an empty string to a boolean or an integer field would crash the
+        process at import time, so the blank value is dropped and the field
+        keeps its default.
+        """
+        if not isinstance(values, dict):
+            return values
+        cleaned = {}
+        for key, value in values.items():
+            if isinstance(value, str) and value.strip() == "":
+                continue
+            cleaned[key] = value
+        return cleaned
 
     @property
     def telegram_ready(self) -> bool:

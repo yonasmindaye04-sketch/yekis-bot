@@ -1663,6 +1663,14 @@
           ${settings.updated_at ? `<span style="margin-left: 10px;">Last change: ${esc(String(settings.updated_at))}</span>` : ""}
         `;
 
+        if (overview.publishing_blocked_reason) {
+          status.innerHTML += `
+            <div style="margin-top: 8px;">
+              <span class="badge risk">not publishing</span>
+              <span style="margin-left: 10px;">${esc(overview.publishing_blocked_reason)}</span>
+            </div>`;
+        }
+
         renderAutonomyCounters(overview);
         renderAutonomyDecisions(decisions);
       } catch (err) {

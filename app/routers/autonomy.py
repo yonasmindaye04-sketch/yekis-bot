@@ -24,6 +24,7 @@ from app.security.auth import Principal, require_role
 from app.services.autonomy import (
     evaluate_opportunity,
     overview,
+    publishing_blocked,
     recent_decisions,
     resolve_config,
     update_config,
@@ -91,6 +92,8 @@ def update_autonomy_settings(
 def autonomy_overview(settings=Depends(get_settings), db: Session = Depends(get_db)):
     config = resolve_config(db, settings)
     counters = overview(db)
+    from datetime import UTC, datetime
+
     return {
         "enabled": config.enabled,
         "mode": config.mode,
@@ -98,6 +101,9 @@ def autonomy_overview(settings=Depends(get_settings), db: Session = Depends(get_
         "daily_publish_limit": config.daily_publish_limit,
         "min_interval_seconds": config.min_interval_seconds,
         "channel": config.channel,
+        # The exact reason why nothing is being published right now. This is
+        # the first thing to check when the channel stays quiet.
+        "publishing_blocked_reason": publishing_blocked(db, config, datetime.now(UTC)),
         **counters,
     }
 
