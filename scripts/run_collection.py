@@ -62,7 +62,8 @@ def main() -> int:
                 print(f"Autonomous publish cycle result: {auto_res}")
             else:
                 print(
-                    f"Autonomy inactive or in shadow mode (enabled={config.enabled}, mode={config.mode})."
+                    "Autonomy inactive or in shadow mode "
+                    f"(enabled={config.enabled}, mode={config.mode})."
                 )
         except Exception as auto_exc:
             print(f"Notice: Autonomy cycle encountered: {auto_exc}", file=sys.stderr)

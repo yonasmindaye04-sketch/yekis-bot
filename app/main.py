@@ -58,8 +58,15 @@ def _ensure_schema(eng) -> None:
             with eng.begin() as conn:
                 for name, col_type, default in opp_columns:
                     if name not in existing_opp_cols:
-                        default_clause = f" DEFAULT {default}" if default is not None else ""
-                        conn.execute(sa.text(f"ALTER TABLE opportunities ADD COLUMN {name} {col_type}{default_clause}"))
+                        default_clause = (
+                            f" DEFAULT {default}" if default is not None else ""
+                        )
+                        conn.execute(
+                            sa.text(
+                                f"ALTER TABLE opportunities ADD COLUMN {name} "
+                                f"{col_type}{default_clause}"
+                            )
+                        )
 
         if "publications" in existing_tables:
             existing_pub_cols = {c["name"] for c in inspector.get_columns("publications")}
@@ -71,8 +78,15 @@ def _ensure_schema(eng) -> None:
             with eng.begin() as conn:
                 for name, col_type, default in pub_columns:
                     if name not in existing_pub_cols:
-                        default_clause = f" DEFAULT {default}" if default is not None else ""
-                        conn.execute(sa.text(f"ALTER TABLE publications ADD COLUMN {name} {col_type}{default_clause}"))
+                        default_clause = (
+                            f" DEFAULT {default}" if default is not None else ""
+                        )
+                        conn.execute(
+                            sa.text(
+                                f"ALTER TABLE publications ADD COLUMN {name} "
+                                f"{col_type}{default_clause}"
+                            )
+                        )
     except Exception as exc:
         logging.getLogger(__name__).warning("Schema auto-ensure failed: %s", exc)
 
