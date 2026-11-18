@@ -10,7 +10,12 @@ jobs:
   collect:
     name: Scrape & Extract Opportunities
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # The model endpoint needs 90-180 seconds per call and a run makes one
+    # call per new post plus one per classified opportunity. The collection
+    # phase has its own wall clock budget (COLLECTION_TIME_BUDGET_SECONDS),
+    # so this timeout only has to cover the worst case of a full budget plus
+    # the classification batch.
+    timeout-minutes: 60
 
     steps:
       - name: Checkout Code
@@ -34,17 +39,57 @@ jobs:
           mkdir -p var
           echo "$TELEGRAM_SESSION_B64" | base64 --decode > var/telegram_user.session
 
+      # Same code path as the application startup. It runs "alembic upgrade
+      # head" and, when the database was created outside Alembic (the API
+      # does that on a cold start), it reconciles the schema and stamps the
+      # revision first. Without that, the migration fails with
+      # "table sources already exists" and this job never collects anything.
       - name: Run Database Migrations
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
-          alembic upgrade head
+          python -m scripts.migrate
 
       - name: Seed Production Sources
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
           python -m scripts.seed_sources
+
+      # Prints the effective configuration of the job and every reason why
+      # the autonomous publishing pipeline cannot publish right now. It never
+      # prints a secret value.
+      - name: Preflight Diagnostics
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          TELEGRAM_ENABLED: "true"
+          TELEGRAM_API_ID: ${{ secrets.TELEGRAM_API_ID }}
+          TELEGRAM_API_HASH: ${{ secrets.TELEGRAM_API_HASH }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_SESSION_PATH: "var/telegram_user"
+          EXTRACTION_PROVIDER: ${{ secrets.EXTRACTION_PROVIDER || 'llm' }}
+          LLM_BASE_URL: ${{ secrets.LLM_BASE_URL || secrets.LLM_API_BASE }}
+          LLM_MODEL: ${{ secrets.LLM_MODEL }}
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+          CLASSIFICATION_PROVIDER: ${{ secrets.CLASSIFICATION_PROVIDER || 'llm' }}
+          CLASSIFICATION_MODEL: ${{ secrets.CLASSIFICATION_MODEL }}
+          LLM_TIMEOUT_SECONDS: ${{ secrets.LLM_TIMEOUT_SECONDS || '180' }}
+          LLM_MAX_ATTEMPTS: ${{ secrets.LLM_MAX_ATTEMPTS || '2' }}
+          LLM_RETRY_WAIT_SECONDS: ${{ secrets.LLM_RETRY_WAIT_SECONDS || '5' }}
+          AUTONOMY_ENABLED: ${{ secrets.AUTONOMY_ENABLED }}
+          AUTONOMY_MODE: ${{ secrets.AUTONOMY_MODE }}
+          AUTONOMY_TARGET_CHANNEL: ${{ secrets.AUTONOMY_TARGET_CHANNEL }}
+          AUTONOMY_PILOT_CHANNEL: ${{ secrets.AUTONOMY_PILOT_CHANNEL }}
+          AUTONOMY_APPROVED_SOURCE_IDS: ${{ secrets.AUTONOMY_APPROVED_SOURCE_IDS }}
+          AUTONOMY_APPROVED_CATEGORIES: ${{ secrets.AUTONOMY_APPROVED_CATEGORIES }}
+          AUTONOMY_AUTO_APPROVAL_THRESHOLD: ${{ secrets.AUTONOMY_AUTO_APPROVAL_THRESHOLD }}
+          AUTONOMY_DAILY_PUBLISH_LIMIT: ${{ secrets.AUTONOMY_DAILY_PUBLISH_LIMIT }}
+          AUTONOMY_MIN_INTERVAL_SECONDS: ${{ secrets.AUTONOMY_MIN_INTERVAL_SECONDS }}
+          AUTONOMY_EVALUATE_LIMIT: ${{ secrets.AUTONOMY_EVALUATE_LIMIT }}
+          PUBLISHING_ENABLED: "true"
+          PUBLISHING_ALLOWED_CHANNELS: ${{ secrets.PUBLISHING_ALLOWED_CHANNELS || '@yekis_channel' }}
+        run: |
+          python -m scripts.preflight
 
       - name: Execute Telegram Collection
         env:
@@ -55,17 +100,28 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_SESSION_PATH: "var/telegram_user"
           TELEGRAM_FETCH_LIMIT: "15"
+          # Wall clock budget for the collection phase. What is not collected
+          # in this run is collected by the next one, and the publishing phase
+          # below is always reached.
+          COLLECTION_TIME_BUDGET_SECONDS: "900"
           ADMIN_ALERTS_ENABLED: "false"
-          EXTRACTION_PROVIDER: ${{ secrets.EXTRACTION_PROVIDER }}
+          EXTRACTION_PROVIDER: ${{ secrets.EXTRACTION_PROVIDER || 'llm' }}
           # The application reads LLM_BASE_URL (field llm_base_url). The old
           # LLM_API_BASE name was never read, so every request fell back to
           # https://api.openai.com/v1 and the NVIDIA key never reached NIM.
           LLM_BASE_URL: ${{ secrets.LLM_BASE_URL || secrets.LLM_API_BASE }}
           LLM_MODEL: ${{ secrets.LLM_MODEL }}
           LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+          # The model answers in 90-180 seconds. Without this the request
+          # timed out after the 30 second default, every classification fell
+          # back to the deterministic rules, and no post could ever reach the
+          # automatic approval threshold.
+          LLM_TIMEOUT_SECONDS: ${{ secrets.LLM_TIMEOUT_SECONDS || '180' }}
+          LLM_MAX_ATTEMPTS: ${{ secrets.LLM_MAX_ATTEMPTS || '2' }}
+          LLM_RETRY_WAIT_SECONDS: ${{ secrets.LLM_RETRY_WAIT_SECONDS || '5' }}
           # Classification stage. Without a model no post can reach the
           # automatic approval threshold, so nothing is published.
-          CLASSIFICATION_PROVIDER: ${{ secrets.CLASSIFICATION_PROVIDER }}
+          CLASSIFICATION_PROVIDER: ${{ secrets.CLASSIFICATION_PROVIDER || 'llm' }}
           CLASSIFICATION_MODEL: ${{ secrets.CLASSIFICATION_MODEL }}
           # Autonomous approval and publishing. Every value is optional: a
           # missing secret keeps the safe default (disabled).
@@ -80,6 +136,9 @@ jobs:
           AUTONOMY_MIN_INTERVAL_SECONDS: ${{ secrets.AUTONOMY_MIN_INTERVAL_SECONDS }}
           AUTONOMY_EVALUATE_LIMIT: ${{ secrets.AUTONOMY_EVALUATE_LIMIT }}
           PUBLISHING_ENABLED: "true"
-          PUBLISHING_ALLOWED_CHANNELS: "@yekis_channel"
+          # Must contain the channel the dashboard publishes to. The API side
+          # and this job read the allowlist from their own environment, so
+          # both have to list the same channel.
+          PUBLISHING_ALLOWED_CHANNELS: ${{ secrets.PUBLISHING_ALLOWED_CHANNELS || '@yekis_channel' }}
         run: |
           python -m scripts.run_collection

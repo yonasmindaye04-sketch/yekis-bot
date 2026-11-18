@@ -14,6 +14,7 @@ import json
 import logging
 import random
 import sys
+import time
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime, timedelta
 
@@ -68,6 +69,7 @@ async def collect_source(
     *,
     limit: int | None = None,
     now: datetime | None = None,
+    deadline: float | None = None,
 ) -> CollectorResult:
     now = now or utcnow()
     fetch_limit = limit or default_settings.telegram_fetch_limit
@@ -95,6 +97,12 @@ async def collect_source(
         result = CollectorResult(source_id, "collected", fetched=len(messages))
         highest = min_id
         for message in messages:
+            if deadline is not None and time.monotonic() > deadline:
+                # The run is out of time. The checkpoint stays on the last
+                # processed message so the remaining messages are collected
+                # by the next run instead of being skipped forever.
+                result.skipped_reason = "time_budget_exhausted"
+                break
             highest = max(highest, message.message_id)
             if message.message_id <= min_id:
                 result.duplicates += 1
@@ -162,6 +170,7 @@ async def collect_sources(
     source_ids: list[int] | None = None,
     limit: int | None = None,
     now: datetime | None = None,
+    deadline: float | None = None,
 ) -> list[CollectorResult]:
     statement = select(Source).where(
         Source.source_type == "telegram", Source.is_active.is_(True)
@@ -169,10 +178,12 @@ async def collect_sources(
     if source_ids:
         statement = statement.where(Source.id.in_(source_ids))
     sources = list(db.scalars(statement).all())
-    return [
-        await collect_source(db, source, client, limit=limit, now=now)
-        for source in sources
-    ]
+    results: list[CollectorResult] = []
+    for source in sources:
+        results.append(
+            await collect_source(db, source, client, limit=limit, now=now, deadline=deadline)
+        )
+    return results
 
 
 async def _run_cli(source_ids: list[int] | None, limit: int | None) -> int:

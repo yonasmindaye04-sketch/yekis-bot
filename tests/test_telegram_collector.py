@@ -288,3 +288,74 @@ def test_backoff_is_bounded_and_increases():
     assert 30 <= backoff_seconds(1) <= 40
     assert backoff_seconds(10) <= 3600 + 360
     assert backoff_seconds(50) <= 3600 + 360
+
+
+def test_the_collection_stops_at_the_time_budget(db_session, source):
+    """A scheduled run must always reach its publishing phase.
+
+    Every ingested post can cost one model call. Without a wall clock budget
+    a backlog of new posts pushes the run past the job timeout, and the job
+    is killed before the autonomous publishing cycle - which runs in the same
+    process - is ever started.
+    """
+    import time
+
+    fake = FakeTelegramClient(
+        {
+            source.source_url: [
+                _message(1, "Looking for a Python developer. Budget $500."),
+                _message(2, "Need a graphic designer for a logo. Budget ETB 15,000."),
+                _message(3, "Wanted: a React engineer for a two month contract."),
+            ]
+        }
+    )
+
+    # The budget is already exhausted when the run starts.
+    result = asyncio.run(
+        collect_source(db_session, source, fake, now=NOW, deadline=time.monotonic() - 1)
+    )
+
+    assert result.ingested == 0
+    assert result.skipped_reason == "time_budget_exhausted"
+
+    # The checkpoint stays where it was, so the messages are collected by the
+    # next run instead of being skipped forever.
+    db_session.refresh(source)
+    assert not source.last_collected_message_id
+
+    # The next run, with time left, collects everything.
+    result = asyncio.run(collect_source(db_session, source, fake, now=NOW))
+    assert result.ingested == 3
+    db_session.refresh(source)
+    assert source.last_collected_message_id == 3
+
+
+def test_the_budget_is_shared_by_all_the_sources(db_session, source):
+    """The budget covers the whole run, not every source on its own."""
+    import time
+
+    from app.integrations.telegram.collector import collect_sources
+
+    second = Source(
+        name="Second channel",
+        source_type="telegram",
+        source_url="https://t.me/audit_second_channel",
+        is_active=True,
+    )
+    db_session.add(second)
+    db_session.commit()
+
+    fake = FakeTelegramClient(
+        {
+            source.source_url: [_message(1, "Looking for a Python developer. Budget $500.")],
+            second.source_url: [_message(1, "Need a graphic designer for a logo.")],
+        }
+    )
+
+    results = asyncio.run(
+        collect_sources(
+            db_session, fake, now=NOW, deadline=time.monotonic() + 3600
+        )
+    )
+    assert len(results) == 2
+    assert all(result.ingested == 1 for result in results)

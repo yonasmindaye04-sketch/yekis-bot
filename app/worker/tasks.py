@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from dataclasses import asdict
 from datetime import UTC, datetime
 
@@ -99,11 +100,17 @@ def collect_job(
 
     key = idempotency_key or f"collect:{datetime.now(UTC).strftime('%Y%m%d%H%M')}"
 
+    # The collection phase is bounded so that a backlog of new posts can never
+    # push the scheduled run past its job timeout: the publishing phase that
+    # follows in the same run has to be reached even when collection is slow.
+    budget = settings.collection_time_budget_seconds
+    deadline = time.monotonic() + budget if budget > 0 else None
+
     async def _collect() -> list[dict]:
         client = TelethonClient()
         try:
             results = await collect_sources(
-                db, client, source_ids=source_ids, limit=limit
+                db, client, source_ids=source_ids, limit=limit, deadline=deadline
             )
             return [asdict(result) for result in results]
         finally:

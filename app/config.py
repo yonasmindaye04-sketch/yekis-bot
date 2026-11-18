@@ -69,7 +69,12 @@ class Settings(BaseSettings):
     gemini_api_key: str | None = None
     gemini_base_url: str = "https://generativelanguage.googleapis.com/v1beta"
     gemini_model: str = "gemini-2.5-flash"
-    llm_timeout_seconds: float = 30.0
+    # Request timeout for a single model call. The default is deliberately
+    # above the 30 seconds that a hosted API usually needs: the self-hosted
+    # NVIDIA NIM endpoint used in production answers in 90-180 seconds, and a
+    # too short timeout silently degrades the pipeline to the deterministic
+    # rules, which can never reach the automatic approval threshold.
+    llm_timeout_seconds: float = 120.0
     # Provider-level retry for transient failures (timeout, 429, 5xx). NVIDIA
     # NIM cold starts can exceed a single request timeout, so one bounded
     # retry is enabled by default. Schema/credential failures are not retried.
@@ -124,6 +129,13 @@ class Settings(BaseSettings):
     # A model call can take a minute or more, so the batch has to stay small
     # enough to finish inside the job timeout.
     autonomy_evaluate_limit: int = 5
+
+    # Wall clock budget for the collection phase of a scheduled run. Each
+    # ingested post can cost one model call, so without a budget a backlog of
+    # new posts can push the run past the job timeout and kill it before the
+    # publishing phase is ever reached. What is left over is picked up by the
+    # next run.
+    collection_time_budget_seconds: int = 900
 
     # Admin Alerts
     admin_alerts_enabled: bool = False

@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app import models  # noqa: F401
 from app.config import settings
-from app.db import Base, engine
+from app.db import engine
 from app.routers import (
     analytics,
     autonomy,
@@ -18,6 +18,7 @@ from app.routers import (
     publications,
     sources,
 )
+from app.schema import ensure_schema, model_tables_present
 from app.security.auth import validate_security_config
 
 STATIC_DIR = Path(__file__).parent / "static" / "admin"
@@ -25,70 +26,33 @@ IS_DEVELOPMENT = settings.app_env == "development"
 
 
 def _ensure_schema(eng) -> None:
-    try:
-        import sqlalchemy as sa
-        Base.metadata.create_all(bind=eng)
-        inspector = sa.inspect(eng)
-        existing_tables = set(inspector.get_table_names())
-        if "opportunities" in existing_tables:
-            existing_opp_cols = {c["name"] for c in inspector.get_columns("opportunities")}
-            opp_columns = [
-                ("client_name", "VARCHAR(250)", None),
-                ("classification", "VARCHAR(40)", "'insufficient_information'"),
-                ("engagement_type", "VARCHAR(40)", None),
-                ("is_genuine_opportunity", "BOOLEAN", "false"),
-                ("is_publishable", "BOOLEAN", "false"),
-                ("classification_confidence", "FLOAT", "0.0"),
-                ("classification_evidence", "JSON", "'[]'"),
-                ("classification_reasons", "JSON", "'[]'"),
-                ("classification_method", "VARCHAR(30)", "'deterministic'"),
-                ("classifier_version", "VARCHAR(30)", None),
-                ("model_provider", "VARCHAR(30)", None),
-                ("model_name", "VARCHAR(120)", None),
-                ("risk_level", "VARCHAR(20)", "'none'"),
-                ("risk_assessment", "JSON", "'{}'"),
-                ("approval_method", "VARCHAR(20)", None),
-                ("approval_reason", "TEXT", None),
-                ("approved_at", "TIMESTAMPTZ", None),
-                ("approved_by", "VARCHAR(120)", None),
-                ("quarantined", "BOOLEAN", "false"),
-                ("deadline", "VARCHAR(120)", None),
-                ("application_url", "VARCHAR(1000)", None),
-            ]
-            with eng.begin() as conn:
-                for name, col_type, default in opp_columns:
-                    if name not in existing_opp_cols:
-                        default_clause = (
-                            f" DEFAULT {default}" if default is not None else ""
-                        )
-                        conn.execute(
-                            sa.text(
-                                f"ALTER TABLE opportunities ADD COLUMN {name} "
-                                f"{col_type}{default_clause}"
-                            )
-                        )
+    """Bring the database schema to the current revision.
 
-        if "publications" in existing_tables:
-            existing_pub_cols = {c["name"] for c in inspector.get_columns("publications")}
-            pub_columns = [
-                ("is_autonomous", "BOOLEAN", "false"),
-                ("autonomy_mode", "VARCHAR(20)", None),
-                ("content_hash", "VARCHAR(64)", None),
-            ]
-            with eng.begin() as conn:
-                for name, col_type, default in pub_columns:
-                    if name not in existing_pub_cols:
-                        default_clause = (
-                            f" DEFAULT {default}" if default is not None else ""
-                        )
-                        conn.execute(
-                            sa.text(
-                                f"ALTER TABLE publications ADD COLUMN {name} "
-                                f"{col_type}{default_clause}"
-                            )
-                        )
+    Alembic owns the schema. When the migration scripts are not reachable the
+    application falls back to creating the tables from its models, which is
+    only ever acceptable for a local checkout.
+
+    ``AUTO_CREATE_SCHEMA=false`` disables schema management completely: the
+    database is then expected to be prepared out of band, and the application
+    only reports what it finds.
+    """
+    logger = logging.getLogger(__name__)
+    if not settings.auto_create_schema:
+        logger.info("Schema management is disabled (AUTO_CREATE_SCHEMA=false)")
+        try:
+            if not model_tables_present(eng):
+                logger.warning(
+                    "the database has no tables yet; it is prepared by the migration "
+                    "step (python -m scripts.migrate) of the deployment"
+                )
+        except Exception:  # pragma: no cover - the database may not exist yet
+            logger.debug("could not inspect the database", exc_info=True)
+        return
+    try:
+        status = ensure_schema(eng)
+        logger.info("Schema is ready (%s)", status)
     except Exception as exc:
-        logging.getLogger(__name__).warning("Schema auto-ensure failed: %s", exc)
+        logger.warning("Schema auto-ensure failed: %s", exc)
 
 
 @asynccontextmanager

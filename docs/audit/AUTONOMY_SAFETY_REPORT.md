@@ -178,18 +178,19 @@ channel stays quiet.
 |---|---|---|---|
 | 1 | A model provider for the classification stage | secret `CLASSIFICATION_PROVIDER` (`llm` or `gemini`) | Every post stays at confidence `0.90` and goes to human review. Nothing is ever auto-approved. |
 | 2 | A reachable model endpoint | secret `LLM_BASE_URL` | The app falls back to `https://api.openai.com/v1`; the NVIDIA key is rejected with 401 and the pipeline degrades to rules. |
-| 3 | The engine enabled | secret `AUTONOMY_ENABLED=true` **and** the dashboard switch | `run_collection.py` prints "Autonomy inactive" and skips the cycle. |
-| 4 | A mode that publishes | `AUTONOMY_MODE=supervised` or `production` | Shadow mode records decisions but never publishes. |
-| 5 | A target channel | secret `AUTONOMY_TARGET_CHANNEL` | `publishing_blocked()` returns "no channel is configured for production mode". |
-| 6 | The channel allowlisted | `PUBLISHING_ALLOWED_CHANNELS=@yekis_channel` | The send fails closed with "channel is not allowlisted". |
-| 7 | Approved sources | secret `AUTONOMY_APPROVED_SOURCE_IDS` (for example `1,2`) | Every opportunity is rejected with "the source is not approved for autonomous publishing". |
-| 8 | A sane threshold | `AUTONOMY_AUTO_APPROVAL_THRESHOLD=0.95` | A higher threshold means nothing can qualify. |
+| 3 | A timeout that fits the endpoint | secret `LLM_TIMEOUT_SECONDS` (default `180`) | The request is aborted after the 30 second application default. Every classification silently falls back to the deterministic rules, so nothing can ever be auto-approved. |
+| 4 | The engine enabled | secret `AUTONOMY_ENABLED=true` **and** the dashboard switch | `run_collection.py` prints "Autonomy inactive" and skips the cycle. |
+| 5 | A mode that publishes | `AUTONOMY_MODE=supervised` or `production` | Shadow mode records decisions but never publishes. |
+| 6 | A target channel | secret `AUTONOMY_TARGET_CHANNEL` | `publishing_blocked()` returns "no channel is configured for production mode". |
+| 7 | The channel allowlisted | `PUBLISHING_ALLOWED_CHANNELS=@yekis_channel` | The dashboard reports "the channel ... is not in PUBLISHING_ALLOWED_CHANNELS" and the send fails closed. |
+| 8 | Approved sources | secret `AUTONOMY_APPROVED_SOURCE_IDS` (for example `1,2`) | Every opportunity is rejected with "the source is not approved for autonomous publishing". |
+| 9 | A sane threshold | `AUTONOMY_AUTO_APPROVAL_THRESHOLD=0.95` | A higher threshold means nothing can qualify. |
 
 The source ids are the ids of the seeded rows (`afriwork`, `hahu jobs`). Read
 them from the dashboard (*Sources* tab) or from
 `SELECT id, name FROM sources ORDER BY id;`.
 
-Steps 3, 4, 5 and 7 can also be set from the dashboard. The dashboard writes
+Steps 4, 5, 6 and 8 can also be set from the dashboard. The dashboard writes
 them to `autonomy_settings`, and that row takes precedence over the
 environment, so a dashboard change is picked up by the next scheduled run
 without touching the secrets.
@@ -203,14 +204,71 @@ curl -H "X-API-Key: $YI_ADMIN_KEY" http://localhost:8100/api/v1/autonomy/overvie
 The `publishing_blocked_reason` field states exactly why nothing is being
 published right now. The same reason is printed in the workflow log.
 
+### 4.4 The split deployment: Vercel (API) + GitHub Actions (collector)
+
+This is the topology the service runs in. The API and the dashboard live on
+Vercel; the collector, the classification, and the publishing live in the
+GitHub Actions workflow. There is no Celery worker on Vercel, so the workflow
+is the only process that can publish.
+
+Both sides share one database. Four defects of that split were fatal, and
+all four are fixed:
+
+| Defect | Effect | Fix |
+|---|---|---|
+| The API created the tables outside Alembic, the workflow ran `alembic upgrade head` | The migration failed with `table sources already exists`, the job aborted, and nothing was ever collected or published | `python -m scripts.migrate` migrates and repairs a database created outside Alembic; `tests/test_schema_parity.py` keeps the models and the migrations identical |
+| The workflow did not pass `LLM_TIMEOUT_SECONDS` | Every model call was aborted after 30 seconds and silently degraded to the deterministic rules | The workflow passes `LLM_TIMEOUT_SECONDS` (default `180`), `LLM_MAX_ATTEMPTS`, and `LLM_RETRY_WAIT_SECONDS` |
+| One model call per new post, no time budget, 30 minute job timeout | A backlog of new posts pushed the run past the timeout; the job was killed before the publishing phase | `COLLECTION_TIME_BUDGET_SECONDS` bounds the collection phase, the workflow timeout is 60 minutes, and the checkpoint only advances over the messages that were really ingested |
+| The dashboard and the workflow read the channel allowlist from their own environment | The dashboard showed "no blocker" while the workflow refused to publish | The allowlist is part of the blocked reason, and the preflight prints it on both sides |
+
+The workflow prints its effective configuration and every blocker before it
+collects anything:
+
+```bash
+python -m scripts.preflight          # report only
+python -m scripts.preflight --strict # exit 1 when a blocker is found
+```
+
+The output never contains a secret value, only whether one is set.
+
+Two properties of the split are worth remembering:
+
+- the allowlist is read from the environment of whichever process publishes, so
+  `PUBLISHING_ALLOWED_CHANNELS` has to be set on **both** sides;
+- the autonomy settings live in the database and are owned by the dashboard,
+  so a dashboard change reaches the next scheduled run without a redeploy.
+
+### 4.5 Credential rotation
+
+The API keys of this project were committed to the dashboard in earlier
+revisions of a **public** repository. Those keys are compromised: anyone can
+read them from the git history, whatever the current file says.
+
+The rotation:
+
+1. generate a new key per role, at least 16 characters;
+2. add it to `AUTH_API_KEYS` in the Vercel environment and in the workflow
+   secret;
+3. redeploy the API and re-run the workflow;
+4. remove the old key from both places and redeploy again;
+5. confirm that the old key no longer authenticates.
+
+The preset keys are no longer part of the dashboard, and
+`tests/test_deployment_contract.py` fails the build when a credential-shaped
+string is committed again.
+
 Operational notes:
+
+### 4.6 Operational notes
 
 - `AUTONOMY_EVALUATE_LIMIT` (default 5) bounds how many posts are classified
   per run. A model call can take a minute or more, so the batch must stay
   small enough for the job timeout.
 - Shadow mode also evaluates now, so the decision log fills with real
   `would_auto_approve` rows that can be compared with the human decisions.
-- The workflow timeout was raised from 15 to 30 minutes for the same reason.
+- The workflow timeout was raised to 60 minutes, and the collection phase has
+  its own wall clock budget, so a slow model never moves the publishing phase
+  out of the job.
 
 ## 5. Rollback
 
@@ -288,6 +346,12 @@ curl -H "X-API-Key: $KEY" http://localhost:8100/api/v1/publications
   deletes them.
 - Original post text is never mutated. The normalizer builds a separate
   representation.
+- The channel allowlist is part of the blocked reason, so a channel that is
+  not allowlisted is reported instead of silently skipped.
+- The preset keys are gone from the dashboard, and a committed credential now
+  fails the test suite (`tests/test_deployment_contract.py`). The keys that
+  were committed to the public repository before that have to be revoked; see
+  §4.5.
 
 ## 8. Remaining limitations and backlog
 
@@ -325,3 +389,7 @@ curl -H "X-API-Key: $KEY" http://localhost:8100/api/v1/publications
 - [ ] The daily limit and the minimum interval are set to conservative values.
 - [ ] `PUBLISHING_ALLOWED_CHANNELS` contains exactly one channel.
 - [ ] The rollback command has been executed once in the test environment.
+- [ ] `python -m scripts.preflight` reports no blocker in the scheduled job
+      environment.
+- [ ] Every API key that was ever committed to the repository is revoked and
+      replaced.

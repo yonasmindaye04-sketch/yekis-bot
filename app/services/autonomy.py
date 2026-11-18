@@ -608,8 +608,18 @@ def last_published_at(db: Session, channel: str) -> datetime | None:
     )
 
 
-def publishing_blocked(db: Session, config: AutonomyConfig, now: datetime) -> str | None:
+def publishing_blocked(
+    db: Session,
+    config: AutonomyConfig,
+    now: datetime,
+    settings=default_settings,
+) -> str | None:
     """Return the reason why publishing is currently blocked, if it is."""
+    from app.integrations.telegram.channel import channel_reference
+    from app.services.publishing import allowed_channels
+
+    settings = settings or default_settings
+
     if not config.enabled:
         return "autonomous publishing is disabled"
     if config.is_shadow:
@@ -617,6 +627,12 @@ def publishing_blocked(db: Session, config: AutonomyConfig, now: datetime) -> st
     channel = config.channel
     if not channel:
         return f"no channel is configured for {config.mode} mode"
+    try:
+        reference = channel_reference(channel)
+    except Exception:
+        reference = channel
+    if reference not in allowed_channels(settings):
+        return f"the channel {reference} is not in PUBLISHING_ALLOWED_CHANNELS"
     if config.daily_publish_limit <= 0:
         return "the daily publishing limit is zero"
     if published_today(db, channel, now) >= config.daily_publish_limit:
@@ -817,7 +833,7 @@ async def run_autonomous_publish_cycle(
         outcome["skipped"].append("publishing is disabled")
         return outcome
 
-    blocked = publishing_blocked(db, config, now)
+    blocked = publishing_blocked(db, config, now, settings)
     if blocked:
         outcome["skipped"].append(blocked)
         return outcome
@@ -837,7 +853,7 @@ async def run_autonomous_publish_cycle(
     for opportunity in candidates[:limit]:
         # The limit and the minimum interval are re-checked for every single
         # message, not only once per cycle.
-        blocked_now = publishing_blocked(db, config, now)
+        blocked_now = publishing_blocked(db, config, now, settings)
         if blocked_now:
             outcome["skipped"].append(blocked_now)
             break

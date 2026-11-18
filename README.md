@@ -98,7 +98,7 @@ All `/api/v1/*` routes require `X-API-Key: <key>` (or `Authorization: Bearer <ke
 
 The admin dashboard at `/admin/` follows the visual standards in [`rules.md`](rules.md): zero emoji, status shown as bold colored text (no pills or badges with backgrounds), full dark/light theming driven by CSS tokens with a single header toggle, 44px touch targets, no horizontal overflow, and a 30-minute inactivity timeout that clears the stored key. These standards are enforced automatically by `tests/test_ui_compliance.py`.
 
-For local development, `AUTO_CREATE_SCHEMA=true` creates tables on startup. For controlled environments, set it to `false` and run `alembic upgrade head` before starting the API.
+For local development, `AUTO_CREATE_SCHEMA=true` brings the database to the current revision at startup with Alembic. For controlled environments, set it to `false` and run `python -m scripts.migrate` (or `alembic upgrade head` on a database that Alembic already manages) before starting the API.
 
 ## Example source
 

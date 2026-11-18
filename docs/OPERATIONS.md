@@ -191,6 +191,9 @@ alembic downgrade -1
 alembic check
 ```
 
+Alembic is the only schema authority. The application must never create the
+tables on its own in a shared environment: `AUTO_CREATE_SCHEMA=false`.
+
 Current revision chain:
 
 ```text
@@ -207,6 +210,29 @@ Rules:
 - Run `alembic check` before merging; it must report `No new upgrade operations detected.`
 - Test both upgrade and downgrade on a scratch database.
 - The audit path uses SQLite; the real stack uses PostgreSQL. Re-run migrations against PostgreSQL before a release.
+
+### `python -m scripts.migrate`
+
+The migration entry point used by the scheduled job and by the API startup.
+It runs `alembic upgrade head` and, when the database holds tables that
+Alembic does not know about, reconciles them with the models and stamps the
+revision first.
+
+Use it instead of a bare `alembic upgrade head` whenever the API and a
+scheduled job share one database. A bare `alembic upgrade head` fails with
+`table sources already exists` on a database that the API created when it
+booted, and it leaves an empty `alembic_version` table behind, so every
+later run fails the same way.
+
+```bash
+python -m scripts.migrate
+# schema is ready (upgraded)     # the database was migrated
+# schema is ready (stamped)      # the database was created outside Alembic and repaired
+```
+
+The safety of the repair depends on the models and the migrations describing
+the same database. `tests/test_schema_parity.py` enforces that, so run it
+whenever a model changes.
 
 ### Repairing a partially created database
 
@@ -705,6 +731,10 @@ Before exposing the service to any shared network:
 - [ ] `PUBLISHING_ALLOWED_CHANNELS` contains only intended channels.
 - [ ] `CORS_ORIGINS` is explicit if a browser frontend is hosted elsewhere.
 - [ ] `.env`, `*.session*`, tokens, and session strings are absent from the image and VCS.
+- [ ] Every key that was ever committed to the repository is revoked. A public
+      repository is a public key store: reverting the commit does not remove
+      the key from the history. `pytest tests/test_deployment_contract.py`
+      fails when a credential-shaped string is committed again.
 - [ ] Database backups are encrypted and access-controlled.
 - [ ] Rate limiting and request-body caps are provided by the proxy until application-level limits land.
 - [ ] Logs are aggregated and searched for credentials and message bodies (the code does not log them).
@@ -783,7 +813,9 @@ Known security gaps in the current code:
 
 ## 14. Deployment checklist
 
-### Before deploy
+### 14.1 Single host (Docker Compose)
+
+#### Before deploy
 
 - [ ] `pytest -q` passes.
 - [ ] `ruff check app tests migrations` passes.
@@ -794,7 +826,7 @@ Known security gaps in the current code:
 - [ ] `PUBLISHING_ENABLED` is correct for the environment.
 - [ ] Backups are current.
 
-### Deploy
+#### Deploy
 
 1. Run `alembic upgrade head` as a separate step.
 2. Deploy the API with `AUTO_CREATE_SCHEMA=false`.
@@ -802,12 +834,98 @@ Known security gaps in the current code:
 4. Verify a read endpoint with a key, then the dashboard.
 5. Verify collection on a test source; verify a scheduled publication on a private test channel only.
 
-### After deploy
+#### After deploy
 
 - Watch `/health`, API 5xx, worker logs, dead letters, and publication failures.
 - Confirm `last_success_at` advances for active sources.
 - Confirm no secret appeared in logs.
 - Keep the previous image available for rollback; database rollback is separate and must be planned.
+
+### 14.2 Split deployment: Vercel (API) + GitHub Actions (collector)
+
+Vercel serves the API and the dashboard. The GitHub Actions workflow is the
+only process that can publish: it collects the posts, classifies them, and
+runs the autonomous publishing cycle. There is no Celery worker on Vercel.
+
+Both sides use the **same database** and therefore share the schema. That
+single fact is the source of most deployment failures, so the rules below are
+not optional.
+
+#### Environment
+
+| Variable | Where | Required | Notes |
+|---|---|---|---|
+| `DATABASE_URL` | Vercel env, Actions secret | yes | The same PostgreSQL database on both sides. |
+| `AUTH_API_KEYS` | Vercel env | yes | JSON map of key to role. The dashboard uses it. |
+| `AUTO_CREATE_SCHEMA` | Vercel env | yes | Keep it `true` so the API can prepare the database, or `false` when a migration step runs first. |
+| `CORS_ORIGINS` | Vercel env | yes | The dashboard origin, never `*`. |
+| `PUBLISHING_ALLOWED_CHANNELS` | Vercel env **and** Actions secret | yes | Both sides read the allowlist from their own environment. |
+| `TELEGRAM_API_ID` / `TELEGRAM_API_HASH` | Actions secret | yes | Collection only. |
+| `TELEGRAM_SESSION_B64` | Actions secret | yes | The base64 of the authorized user session. |
+| `TELEGRAM_BOT_TOKEN` | Actions secret | yes | Publishing only. |
+| `LLM_API_KEY`, `LLM_BASE_URL`, `LLM_MODEL` | Actions secret | yes | The model endpoint. |
+| `LLM_TIMEOUT_SECONDS` | Actions secret | no | The workflow defaults it to `180`, which the NVIDIA NIM endpoint needs: it answers in 90-180 seconds. |
+| `LLM_MAX_ATTEMPTS`, `LLM_RETRY_WAIT_SECONDS` | Actions secret | no | The workflow defaults them to `2` and `5`. |
+| `CLASSIFICATION_PROVIDER` | Actions secret | no | The workflow defaults it to `llm`. With `rules` no post can ever reach the automatic approval threshold. |
+| `EXTRACTION_PROVIDER` | Actions secret | no | The workflow defaults it to `llm`. |
+| `AUTONOMY_ENABLED`, `AUTONOMY_MODE` | Actions secret | yes | `true` and `supervised` for a pilot, then `production`. |
+| `AUTONOMY_TARGET_CHANNEL` | Actions secret | yes | Must also be in `PUBLISHING_ALLOWED_CHANNELS`. |
+| `AUTONOMY_APPROVED_SOURCE_IDS` | Actions secret | yes | The ids shown by `python -m scripts.preflight`. |
+| `PUBLISHING_ENABLED` | Actions secret | no | The workflow sets it to `true` for the collector. |
+| `PUBLISHING_ALLOWED_CHANNELS` | Actions secret | yes | Same value as on Vercel. |
+
+The autonomy settings themselves live in the `autonomy_settings` table and are
+owned by the dashboard. A value saved in the dashboard wins over the
+environment, so the dashboard and the collector always agree about the
+channel, the mode, and the approved sources.
+
+#### Before deploy
+
+- [ ] `pytest -q` passes and `ruff check app tests migrations scripts` passes.
+- [ ] The keys from the previous deployment are revoked. A key that was ever
+      committed to a public repository is compromised; see §12.
+- [ ] The database is reachable from both sides.
+- [ ] `python -m scripts.preflight` reports no blocker.
+
+#### Deploy
+
+1. Merge to `main`. The Vercel deployment picks up the API and the dashboard.
+2. Set the Actions secrets listed above.
+3. Trigger the workflow manually (`workflow_dispatch`) and read the
+   **Preflight Diagnostics** step. It prints the effective configuration and
+   every reason why nothing would be published.
+4. The workflow migrates the database first (`python -m scripts.migrate`), so
+   a database that was created by an earlier API boot is repaired instead of
+   breaking the job.
+5. Keep the autonomy mode `shadow` for the first runs. The dashboard shows
+   what the engine would have approved.
+6. Switch to `supervised` and then to `production` from the dashboard.
+
+#### After deploy
+
+- [ ] The `Preflight Diagnostics` step of every run lists no blocker.
+- [ ] `last_success_at` advances for the active sources.
+- [ ] The dashboard shows `publishing_blocked_reason: null`.
+- [ ] The first messages appear in the channel, and the count per UTC day
+      stays inside `AUTONOMY_DAILY_PUBLISH_LIMIT`.
+
+### 14.3 Rotating the API keys
+
+The API keys live in `AUTH_API_KEYS`. They are the only thing the dashboard
+and the collectors use to authenticate, so rotating them means changing the
+value in two places and restarting both sides.
+
+1. Generate a new key of at least 16 characters.
+2. Add it to `AUTH_API_KEYS` in the Vercel environment and in the
+   `AUTH_API_KEYS` secret of the workflow.
+3. Redeploy the API and re-run the workflow.
+4. Remove the old key from both places and redeploy again.
+5. Confirm that the old key no longer authenticates:
+   `curl -H "X-API-Key: <old key>" https://<deployment>/api/v1/health`.
+
+A key that has been committed to a public repository has to be revoked, not
+just replaced. The history of the repository stays readable after a commit is
+reverted.
 
 ---
 
@@ -820,3 +938,10 @@ Known security gaps in the current code:
 - No application-level rate limiting or request-body caps.
 - No alerting integration; use your platform's log/metric alerts on the queries above.
 - Analytics is in-process SQL; revisit if data volume grows.
+- The schema repair path relies on the models and the migrations describing the
+  same database. `tests/test_schema_parity.py` enforces it, but a migration
+  that is added without the matching model change (or the other way round)
+  breaks the repair. Run `alembic check` before every deploy.
+- The model calls of a scheduled run are still sequential. A backlog of new
+  posts is spread over several runs by `COLLECTION_TIME_BUDGET_SECONDS`; it is
+  not processed faster than that.

@@ -103,7 +103,7 @@ def autonomy_overview(settings=Depends(get_settings), db: Session = Depends(get_
         "channel": config.channel,
         # The exact reason why nothing is being published right now. This is
         # the first thing to check when the channel stays quiet.
-        "publishing_blocked_reason": publishing_blocked(db, config, datetime.now(UTC)),
+        "publishing_blocked_reason": publishing_blocked(db, config, datetime.now(UTC), settings),
         **counters,
     }
 
