@@ -10,6 +10,7 @@ work? The stages are:
 * Stage 5 and 6 :func:`app.services.classification.pipeline.classify_post`
 """
 
+from app.services.classification.deterministic import is_closed_job
 from app.services.classification.normalize import NormalizedPost, normalize_post
 from app.services.classification.pipeline import (
     DECISION_AUTO_APPROVE,
@@ -58,5 +59,6 @@ __all__ = [
     "UNCERTAIN_CLASSIFICATIONS",
     "UNSAFE_CLASSIFICATIONS",
     "classify_post",
+    "is_closed_job",
     "normalize_post",
 ]

@@ -676,6 +676,7 @@
             </div>
             <div class="actions" style="align-self: flex-end;">
               <button class="primary small" id="triggerCollectBtn" title="Fetch new Telegram messages and extract immediately">Collect Now</button>
+              <button class="warn small" id="cleanClosedBtn" title="Auto-reject opportunities that are closed, filled, or expired">Clean Closed</button>
               <button class="small" id="exportApprovedBtn" title="Export approved opportunities to JSON">Export JSON</button>
               <button class="small" id="refreshReviewBtn">Refresh</button>
             </div>
@@ -1303,6 +1304,27 @@
         pre.textContent = generatePreviewText(item);
       }
       container.classList.remove("hidden");
+    }
+
+    async function triggerCleanClosed() {
+      const btn = $("cleanClosedBtn");
+      btn.disabled = true;
+      btn.textContent = "Cleaning…";
+      toast("Scanning active review queues for closed opportunities…");
+      try {
+        const res = await api("/api/v1/opportunities/cleanup-closed", { method: "POST" });
+        if (res.cleaned_count > 0) {
+          toast(`Auto-rejected ${res.cleaned_count} closed opportunities.`);
+        } else {
+          toast("No closed opportunities found in active review queues.");
+        }
+        await loadReview();
+      } catch (err) {
+        toast(`Cleanup error: ${err.message}`, true);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Clean Closed";
+      }
     }
 
     async function triggerCollect() {
@@ -2059,6 +2081,7 @@
     $("generateExtIdBtn").addEventListener("click", generateId);
     $("submitIngestBtn").addEventListener("click", submitIngestion);
     $("triggerCollectBtn").addEventListener("click", triggerCollect);
+    $("cleanClosedBtn").addEventListener("click", triggerCleanClosed);
     $("exportApprovedBtn").addEventListener("click", exportApproved);
     $("refreshReviewBtn").addEventListener("click", loadReview);
     $("reviewStatus").addEventListener("change", loadReview);

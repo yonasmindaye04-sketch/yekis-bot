@@ -24,6 +24,36 @@ from app.services.classification.normalize import NormalizedPost
 # Every pattern is a regular expression matched against the lower-cased,
 # normalized text.
 
+#: The job, vacancy, or project is explicitly marked as closed, filled, or expired.
+CLOSED_JOB_PATTERNS: tuple[str, ...] = (
+    # Line banners: "*** Closed ***", "=== Closed ===", "[Closed]", "(Closed)", "Closed"
+    r"^[\s*#=~_\-\[\]\(\)|!:]*(?:closed|filled|expired|completed|taken|hired|ተዘግቷል|ቦታው\s*ተሞልቷል|ምዝገባ(?:ው)?\s*ተጠናቋል)[\s*#=~_\-\[\]\(\)|!:]*$",
+    # Embedded banners: "************ Closed ************", "[Closed] Job Title: ..."
+    r"\*{2,}\s*closed\s*\*{2,}",
+    r"[-=~_]{2,}\s*closed\s*[-=~_]{2,}",
+    r"^[\[\(【]\s*(?:closed|filled|expired|hired|taken)\s*[\]\)】]",
+    # Phrase patterns: "job is closed", "position has been filled"
+    r"\b(?:job|vacancy|position|role|project)\s+(?:is\s+)?(?:closed|filled|taken|completed|expired)\b",
+    r"\b(?:this\s+(?:job|vacancy|position|role|post)\s+is\s+(?:now\s+)?(?:closed|filled|taken|expired))\b",
+    r"\b(?:applications?|submissions?|proposals?)\s+(?:are\s+|have\s+been\s+)?(?:closed|ended)\b",
+    r"\b(?:application\s+closed|applications\s+closed|hiring\s+closed|vacancy\s+closed)\b",
+    r"\b(?:position\s+(?:has\s+been\s+)?filled|vacancy\s+(?:has\s+been\s+)?filled)\b",
+    r"\b(?:no\s+longer\s+accepting\s+(?:applications?|proposals?|candidates?|resumes?|cvs?|submissions?|bids?))\b",
+    r"\b(?:already\s+filled|already\s+taken|already\s+hired)\b",
+    r"\bstatus\s*:\s*(?:closed|filled|completed|expired)\b",
+    # Amharic indicators
+    r"(?:\bተዘግቷል\b|\bሥራው\s*ተዘግቷል\b|\bቦታው\s*ተሞልቷል\b|\bምዝገባ(?:ው)?\s*ተጠናቋል\b|\bሰው\s*ተገኝቷል\b|\bአብቅቷል\b|\bአልቋል\b)",
+)
+
+CLOSED_JOB_COMPILED = re.compile(
+    "|".join(f"(?:{p})" for p in CLOSED_JOB_PATTERNS), re.IGNORECASE | re.MULTILINE
+)
+
+
+def is_closed_job(text: str) -> bool:
+    """True when the post text indicates the opportunity is closed, filled, or expired."""
+    return CLOSED_JOB_COMPILED.search(text) is not None
+
 #: A party is looking for someone to do work.
 SEEKING = (
     (r"\b(?:looking for|looking to hire|looking out for)\b"
@@ -392,6 +422,15 @@ def analyze(post: NormalizedPost) -> DeterministicAnalysis:
 
     analysis = DeterministicAnalysis()
     analysis.matched_groups = sorted(groups)
+
+    if is_closed_job(post.original_text) or is_closed_job(text):
+        analysis.classification = "closed_or_filled_job"
+        analysis.confidence = 0.99
+        analysis.reasons.append(
+            "The job or opportunity is marked as closed, filled, or expired by the source."
+        )
+        analysis.evidence.append("Closed or filled job marker detected")
+        return analysis
 
     if _marketplace_promotion(text, groups):
         analysis.classification = "marketplace_promotion"

@@ -138,3 +138,98 @@ def test_opportunity_list_filters_by_status(client):
     assert len(client.get("/api/v1/opportunities?status=pending_review").json()) == 1
     assert client.get("/api/v1/opportunities?status=approved").json() == []
     assert client.get("/api/v1/opportunities?limit=201").status_code == 422
+
+
+
+def test_closed_job_ingested_is_auto_rejected(client):
+    source = client.post(
+        "/api/v1/sources",
+        json={
+            "name": "Closed source",
+            "source_type": "manual",
+            "source_url": "https://t.me/closed_source",
+            "is_active": True,
+        },
+    ).json()
+    post = (
+        "************ Closed ************\n\n"
+        "Job Title: Editing Dates/Content and Layout of a Design\n\n"
+        "Description: Graphic Design skills needed. Photoshop+Illustrator.\n"
+        "Delivery in 48 hours\n\n"
+        "#Design\n"
+        "@freelance_ethio"
+    )
+    opp = client.post(
+        "/api/v1/ingestion/manual",
+        json={
+            "source_id": source["id"],
+            "external_id": "closed-opp-1",
+            "original_text": post,
+        },
+    ).json()
+
+    assert opp["review_status"] == "rejected"
+    assert opp["classification"] == "closed_or_filled_job"
+    assert opp["approval_method"] == "auto"
+    assert "closed, filled, or expired" in opp["approval_reason"]
+
+    # Ensure it never appears in the pending_review queue
+    pending = client.get("/api/v1/opportunities?status=pending_review").json()
+    assert all(o["id"] != opp["id"] for o in pending)
+
+
+def test_cleanup_closed_opportunities_and_endpoint(client, reviewer_client, db_session):
+    from app.models import Opportunity
+    from app.services.review import cleanup_closed_opportunities
+
+    source = client.post(
+        "/api/v1/sources",
+        json={
+            "name": "Test source",
+            "source_type": "manual",
+            "source_url": "https://t.me/test_cleanup_source",
+            "is_active": True,
+        },
+    ).json()
+
+    # Create an opportunity that was previously in pending_review
+    opp_data = client.post(
+        "/api/v1/ingestion/manual",
+        json={
+            "source_id": source["id"],
+            "external_id": "clean-1",
+            "original_text": "Looking for a React developer. Budget $300.",
+        },
+    ).json()
+
+    # Simulate an opportunity whose text became closed but was left in pending_review
+    opp_obj = db_session.get(Opportunity, opp_data["id"])
+    opp_obj.post.original_text = (
+        "************ Closed ************\n\n"
+        "Job Title: Editing Dates/Content and Layout of a Design"
+    )
+    opp_obj.review_status = "pending_review"
+    db_session.commit()
+
+    # Test Python cleanup function
+    cleaned = cleanup_closed_opportunities(db_session)
+    assert opp_data["id"] in cleaned
+
+    db_session.refresh(opp_obj)
+    assert opp_obj.review_status == "rejected"
+    assert opp_obj.approval_method == "auto"
+    assert opp_obj.classification == "closed_or_filled_job"
+
+    # Put another one in needs_review with closed marker and test API endpoint
+    opp_obj.review_status = "needs_review"
+    opp_obj.title = "[Closed] Senior Python Developer"
+    db_session.commit()
+
+    res = reviewer_client.post("/api/v1/opportunities/cleanup-closed")
+    assert res.status_code == 200, res.text
+    data = res.json()
+    assert data["cleaned_count"] >= 1
+    assert opp_data["id"] in data["cleaned_ids"]
+
+    db_session.refresh(opp_obj)
+    assert opp_obj.review_status == "rejected"

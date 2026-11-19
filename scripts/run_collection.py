@@ -23,6 +23,16 @@ def main() -> int:
         if outcome.value:
             print(f"Outcome details: {outcome.value}")
 
+        # 1.5 Auto-reject closed/filled opportunities from active review queues
+        try:
+            from app.services.review import cleanup_closed_opportunities
+
+            closed_ids = cleanup_closed_opportunities(db)
+            if closed_ids:
+                print(f"Auto-rejected {len(closed_ids)} closed opportunities: {closed_ids}")
+        except Exception as clean_exc:
+            print(f"Warning: closed opportunities cleanup encountered an issue: {clean_exc}")
+
         # 2. Check for due / approved publications to broadcast
         print("Checking for due/approved broadcasts...")
 

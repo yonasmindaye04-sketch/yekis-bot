@@ -61,7 +61,7 @@ def _session_file() -> Path:
     return path
 
 
-def check_database(report: Report) -> None:
+def check_database(report: Report, clean_closed: bool = False) -> None:
     print("\nDatabase")
     with SessionLocal() as db:
         try:
@@ -93,6 +93,46 @@ def check_database(report: Report) -> None:
         for source in sources:
             state = "active" if source.is_active else "inactive"
             report.line(f"source {source.id}", f"{source.name} ({state})")
+
+        from app.models import Opportunity
+        from app.services.classification.deterministic import is_closed_job
+        from app.services.review import cleanup_closed_opportunities
+
+        if clean_closed:
+            cleaned = cleanup_closed_opportunities(db)
+            if cleaned:
+                report.line("closed opps auto-rejected", f"{len(cleaned)} ({cleaned})")
+            else:
+                report.line("closed opps in review queue", "0")
+        else:
+            active_opps = list(
+                db.scalars(
+                    select(Opportunity).where(
+                        Opportunity.review_status.in_(
+                            ("pending_review", "needs_review", "approved")
+                        )
+                    )
+                ).all()
+            )
+            closed_ids = [
+                o.id
+                for o in active_opps
+                if is_closed_job(o.original_text or "") or is_closed_job(o.title or "")
+            ]
+            if closed_ids:
+                report.add(
+                    WARN,
+                    f"{len(closed_ids)} closed/expired opportunity(ies) in review queue: "
+                    f"{closed_ids}; run with `--clean-closed` to auto-reject",
+                )
+                report.line(
+                    "closed opps in review queue",
+                    f"{len(closed_ids)} pending cleanup",
+                    WARN,
+                )
+            else:
+                report.line("closed opps in review queue", "0")
+
         db.commit()
 
 
@@ -217,13 +257,18 @@ def main() -> int:
         action="store_true",
         help="exit with 1 when a blocker is found",
     )
+    parser.add_argument(
+        "--clean-closed",
+        action="store_true",
+        help="auto-reject any closed opportunities found in active review queues",
+    )
     args = parser.parse_args()
 
     print("Yekis deployment preflight")
     print(f"  {'working directory':<34} {os.getcwd()}")
 
     report = Report()
-    check_database(report)
+    check_database(report, clean_closed=args.clean_closed)
     check_telegram(report)
     check_models(report)
     check_autonomy(report)

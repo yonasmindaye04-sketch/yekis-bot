@@ -205,6 +205,40 @@ def _extract_client_name(text: str) -> str | None:
     return None
 
 
+def _clean_title(line: str) -> str:
+    cleaned = line.strip()
+    cleaned = re.sub(
+        r"^(?:job\s+title|title|position)\s*:\s*", "", cleaned, flags=re.IGNORECASE
+    )
+    cleaned = re.sub(
+        r"^[\s*#=~_\-\[\]\(\)|!:]+|[\s*#=~_\-\[\]\(\)|!:]+$", "", cleaned
+    )
+    return cleaned.strip()
+
+
+def _extract_title(text: str) -> str:
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    if not lines:
+        return "New opportunity"
+    # Check for an explicit "Job Title:" or "Position:" line
+    for line in lines:
+        match = re.match(r"^(?:job\s+title|position)\s*:\s*(.+)$", line, re.IGNORECASE)
+        if match:
+            cleaned = _clean_title(match.group(1))
+            if len(cleaned) >= 3:
+                return cleaned[:247]
+    # Find the first substantive line that is not a closure banner
+    for line in lines:
+        cleaned = _clean_title(line)
+        if cleaned.lower() in (
+            "closed", "filled", "expired", "completed", "taken", "hired", "ተዘግቷል",
+        ):
+            continue
+        if len(cleaned) >= 3:
+            return cleaned[:247]
+    return _clean_title(lines[0])[:247] or "New opportunity"
+
+
 def extract_opportunity(text: str) -> ExtractedOpportunity:
     lower = text.lower()
     opportunity_type = _classify_type(lower)
@@ -234,10 +268,7 @@ def extract_opportunity(text: str) -> ExtractedOpportunity:
     else:
         remote = None
 
-    first_line = next(
-        (line.strip() for line in text.splitlines() if line.strip()), "New opportunity"
-    )
-    title = first_line[:247]
+    title = _extract_title(text)
 
     has_job_signal = any(signal in lower for signal in JOB_SIGNALS)
     score = min(

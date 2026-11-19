@@ -41,6 +41,7 @@ NON_TARGET_CLASSIFICATIONS: Final[tuple[str, ...]] = (
 
 # --- C. Non-job content ---------------------------------------------------
 NON_JOB_CLASSIFICATIONS: Final[tuple[str, ...]] = (
+    "closed_or_filled_job",
     "educational_content",
     "skills_tips",
     "training_announcement",

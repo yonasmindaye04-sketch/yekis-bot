@@ -119,3 +119,58 @@ def apply_edit(
     db.refresh(opportunity)
     db.refresh(event)
     return opportunity, event
+
+
+def cleanup_closed_opportunities(
+    db: Session,
+    *,
+    actor: str = "system:autonomy",
+) -> list[int]:
+    """Scan active review and approved queues, auto-rejecting any posts marked closed.
+
+    Returns the list of opportunity IDs that were auto-rejected.
+    """
+    from sqlalchemy import select
+
+    from app.services.classification.deterministic import is_closed_job
+
+    opportunities = list(
+        db.scalars(
+            select(Opportunity).where(
+                Opportunity.review_status.in_(("pending_review", "needs_review", "approved"))
+            )
+        ).all()
+    )
+    closed_ids: list[int] = []
+    now = datetime.now(UTC)
+
+    for opp in opportunities:
+        text = opp.original_text or ""
+        title = opp.title or ""
+        if is_closed_job(text) or is_closed_job(title):
+            from_status = opp.review_status
+            opp.review_status = "rejected"
+            opp.approval_method = "auto"
+            opp.approval_reason = (
+                "The job or opportunity is marked as closed, filled, or expired by the source."
+            )
+            opp.classification = "closed_or_filled_job"
+            opp.is_publishable = False
+            opp.is_genuine_opportunity = False
+            opp.quarantined = False
+
+            event = ReviewEvent(
+                opportunity_id=opp.id,
+                actor=actor,
+                event_type="auto_rejection",
+                from_status=from_status,
+                to_status="rejected",
+                note="Auto-rejected: post marked closed, filled, or expired by source",
+                created_at=now,
+            )
+            db.add(event)
+            closed_ids.append(opp.id)
+
+    if closed_ids:
+        db.commit()
+    return closed_ids

@@ -27,6 +27,7 @@ Choose exactly one classification:
 the post offers paid contracted work.
 - full_time_employment, part_time_employment, internship, volunteering, apprenticeship: it offers \
 real work, but of a type that is outside the contract scope.
+- closed_or_filled_job: the post indicates the job is closed, filled, expired, or completed.
 - educational_content: it teaches job seekers how to find work or improve their employability.
 - skills_tips: it shares tips or a list of skills to learn.
 - training_announcement: it advertises a course, bootcamp, or training programme.

@@ -36,3 +36,17 @@ def test_extracts_client_name_from_company_label():
     )
     result = extract_opportunity(text)
     assert result.client_name == "Addis Software PLC"
+
+
+def test_extract_opportunity_skips_closure_banner_for_title():
+    text = (
+        "************ Closed ************\n\n"
+        "Job Title: Editing Dates/Content and Layout of a Design\n\n"
+        "Description: Graphic Design skills needed. Photoshop+Illustrator.\n"
+        "Delivery in 48 hours\n\n"
+        "#Design\n"
+        "@freelance_ethio"
+    )
+    result = extract_opportunity(text)
+    assert result.title == "Editing Dates/Content and Layout of a Design"
+

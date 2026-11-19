@@ -64,7 +64,7 @@ def test_taxonomy_groups_are_disjoint_and_complete():
     )
     assert len(groups) == len(set(groups))
     assert set(groups) == set(ALL_CLASSIFICATIONS)
-    assert len(ALL_CLASSIFICATIONS) == 24
+    assert len(ALL_CLASSIFICATIONS) == 25
 
 
 def test_only_contract_opportunities_are_publishable():
@@ -76,6 +76,7 @@ def test_only_contract_opportunities_are_publishable():
     for value in (
         "full_time_employment",
         "internship",
+        "closed_or_filled_job",
         "educational_content",
         "scam_or_fraud",
         "ambiguous",
@@ -426,3 +427,42 @@ def test_deterministic_only_never_reaches_the_automatic_threshold():
     )
     assert result.confidence < 0.95
     assert result.decision == DECISION_HUMAN_REVIEW
+
+
+
+def test_closed_banner_post_is_auto_rejected():
+    post = (
+        "************ Closed ************\n\n"
+        "Job Title: Editing Dates/Content and Layout of a Design\n\n"
+        "Description: Graphic Design skills needed. Photoshop+Illustrator.\n"
+        "Delivery in 48 hours\n\n"
+        "#Design\n"
+        "@freelance_ethio"
+    )
+    result = classify_post(post, use_ai=False)
+    assert result.classification == "closed_or_filled_job"
+    assert result.confidence >= 0.90
+    assert result.decision == DECISION_AUTO_REJECT
+    assert result.is_publishable is False
+    assert result.is_genuine_opportunity is False
+    assert any("closed, filled, or expired" in r for r in result.rejection_reasons)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "*** Closed ***\nLooking for a React developer to build an app. Budget $500.",
+        "[Closed] Graphic designer needed for brand identity. Fixed price $300.",
+        "Job Closed: Senior Backend Engineer in Python. Rate $50/hr.",
+        "Position has been filled. Thank you to all who applied.",
+        "We are no longer accepting applications for this project.",
+        "ሥራው ተዘግቷል:: ለተሳተፉ ሁሉ ምስጋናችን ይድረሳቸው::",
+        "ቦታው ተሞልቷል",
+        "Vacancy is closed",
+    ],
+)
+def test_various_closed_markers_are_detected(text):
+    result = classify_post(text, use_ai=False)
+    assert result.classification == "closed_or_filled_job"
+    assert result.decision == DECISION_AUTO_REJECT
+    assert result.is_publishable is False

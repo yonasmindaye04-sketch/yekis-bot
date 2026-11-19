@@ -41,6 +41,7 @@ CLASSIFICATION_GROUPS: dict[str, tuple[str, ...]] = {
         "training_announcement",
     ),
     "announcement": (
+        "closed_or_filled_job",
         "general_announcement",
         "news_and_information",
         "community_discussion",
@@ -241,3 +242,17 @@ def edit_opportunity(
             detail={"code": exc.code, "message": str(exc)},
         ) from exc
     return opportunity
+
+
+@router.post(
+    "/cleanup-closed",
+    dependencies=[Depends(require_role("reviewer"))],
+)
+def cleanup_closed(
+    principal: Principal = Depends(require_role("reviewer")),
+    db: Session = Depends(get_db),
+):
+    from app.services.review import cleanup_closed_opportunities
+
+    closed_ids = cleanup_closed_opportunities(db, actor=principal.name)
+    return {"cleaned_count": len(closed_ids), "cleaned_ids": closed_ids}
