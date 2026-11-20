@@ -86,9 +86,8 @@ def test_vercel_ships_the_migrations_and_has_a_function_budget():
     config = json.loads(VERCEL.read_text(encoding="utf-8"))
     function = config["functions"]["api/index.py"]
     include = function["includeFiles"]
-    if isinstance(include, str):
-        include = [include]
-    assert any(pattern.startswith("migrations/") for pattern in include), (
+    assert isinstance(include, str), "Vercel schema requires includeFiles to be a string glob"
+    assert "migrations" in include, (
         "the API needs the migration scripts to prepare the database"
     )
     assert int(function["maxDuration"]) >= 30

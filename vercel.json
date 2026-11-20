@@ -2,7 +2,7 @@
   "version": 2,
   "functions": {
     "api/index.py": {
-      "includeFiles": ["app/static/**", "migrations/**"],
+      "includeFiles": "{app/static/**,migrations/**}",
       "maxDuration": 60,
       "memory": 1024
     }
