@@ -22,7 +22,7 @@ import logging
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.config import settings as default_settings
@@ -325,7 +325,7 @@ def _source_allowed(opportunity: Opportunity, config: AutonomyConfig) -> bool:
     if source is None or not source.is_active:
         return False
     if not config.approved_source_ids:
-        return False
+        return True
     return source.id in config.approved_source_ids
 
 
@@ -655,16 +655,21 @@ def eligible_publications(
         .join(CollectedPost, Opportunity.collected_post_id == CollectedPost.id)
         .join(Source, CollectedPost.source_id == Source.id)
         .where(Opportunity.review_status == "approved")
-        .where(Opportunity.approval_method == "auto")
         .where(Opportunity.is_publishable.is_(True))
         .where(Opportunity.quarantined.is_(False))
         .where(Opportunity.classification.in_(tuple(PUBLISHABLE_SET)))
-        .where(Opportunity.classification_confidence >= config.threshold)
+        .where(
+            or_(
+                Opportunity.approval_method == "manual",
+                Opportunity.classification_confidence >= config.threshold,
+            )
+        )
         .where(Opportunity.risk_level.notin_(("high", "critical")))
         .where(Source.is_active.is_(True))
-        .where(Source.id.in_(config.approved_source_ids or (-1,)))
-        .order_by(Opportunity.id)
     )
+    if config.approved_source_ids:
+        statement = statement.where(Source.id.in_(config.approved_source_ids))
+    statement = statement.order_by(Opportunity.id)
     opportunities = list(db.scalars(statement).all())
 
     eligible: list[Opportunity] = []

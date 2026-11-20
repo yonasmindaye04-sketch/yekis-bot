@@ -140,6 +140,7 @@ class Settings(BaseSettings):
     # Admin Alerts
     admin_alerts_enabled: bool = False
     admin_alert_chat_id: str = ""
+    admin_alert_batch_size: int = 10
 
     # Marketplace Sync & Webhook
     marketplace_sync_enabled: bool = False

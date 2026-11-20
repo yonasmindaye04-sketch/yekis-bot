@@ -233,3 +233,66 @@ def test_cleanup_closed_opportunities_and_endpoint(client, reviewer_client, db_s
 
     db_session.refresh(opp_obj)
     assert opp_obj.review_status == "rejected"
+
+
+def test_sorting_and_actionable_queue(client, reviewer_client, db_session):
+    from app.models import Publication
+
+    source = client.post(
+        "/api/v1/sources",
+        json={
+            "name": "Queue Source",
+            "source_type": "manual",
+            "source_url": "https://t.me/queue_source",
+            "is_active": True,
+        },
+    ).json()
+
+    opp1 = client.post(
+        "/api/v1/ingestion/manual",
+        json={
+            "source_id": source["id"],
+            "external_id": "queue-1",
+            "original_text": "Need Python engineer for backend API development. Budget $1000.",
+        },
+    ).json()
+
+    opp2 = client.post(
+        "/api/v1/ingestion/manual",
+        json={
+            "source_id": source["id"],
+            "external_id": "queue-2",
+            "original_text": "Need UI Designer for mobile app wireframing. Budget $600.",
+        },
+    ).json()
+
+    # 1. Default sorting is newest first (id descending)
+    res_default = client.get("/api/v1/opportunities").json()
+    ids_default = [item["id"] for item in res_default]
+    assert ids_default.index(opp2["id"]) < ids_default.index(opp1["id"])
+
+    # 2. Test explicit sort parameter
+    res_newest = client.get("/api/v1/opportunities?sort=newest").json()
+    assert [item["id"] for item in res_newest][:2] == [opp2["id"], opp1["id"]]
+
+    # 3. Simulate opp1 being published
+    pub = Publication(
+        opportunity_id=opp1["id"],
+        channel="test_channel",
+        status="published",
+        created_by="system",
+    )
+    db_session.add(pub)
+    db_session.commit()
+
+    # 4. Actionable queue (default) excludes published and rejected
+    res_actionable = client.get("/api/v1/opportunities?status=actionable").json()
+    actionable_ids = [item["id"] for item in res_actionable]
+    assert opp1["id"] not in actionable_ids
+    assert opp2["id"] in actionable_ids
+
+    # 5. Verify is_published flag is returned
+    opp1_read = client.get(f"/api/v1/opportunities/{opp1['id']}").json()
+    assert opp1_read["is_published"] is True
+    opp2_read = client.get(f"/api/v1/opportunities/{opp2['id']}").json()
+    assert opp2_read["is_published"] is False

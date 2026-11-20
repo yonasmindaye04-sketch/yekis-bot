@@ -1,11 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.db import get_db
 from app.integrations.telegram.publisher import PublisherPort
-from app.models import Opportunity, ReviewEvent
+from app.models import Opportunity, Publication, ReviewEvent
 from app.schemas import (
     OpportunityRead,
     OpportunityUpdate,
@@ -69,8 +69,10 @@ def _get_opportunity(db: Session, opportunity_id: int) -> Opportunity:
 )
 def list_opportunities(
     status: str | None = Query(
-        default=None, pattern="^(pending_review|needs_review|approved|rejected)$"
+        default=None,
+        pattern="^(actionable|pending_review|needs_review|approved|published|rejected|closed|all)$",
     ),
+    sort: str = Query(default="newest", pattern="^(newest|quality|updated)$"),
     risk_only: bool = Query(default=False),
     classification: str | None = Query(default=None, max_length=40),
     group: str | None = Query(
@@ -82,11 +84,59 @@ def list_opportunities(
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
 ):
-    statement = select(Opportunity).order_by(
-        Opportunity.quality_score.desc(), Opportunity.id.desc()
+    from app.services.review import cleanup_closed_opportunities
+
+    # Ordering: newest by default so fresh and updated jobs always arrive at the top
+    if sort == "quality":
+        statement = select(Opportunity).order_by(
+            Opportunity.quality_score.desc(), Opportunity.id.desc()
+        )
+    elif sort == "updated":
+        statement = select(Opportunity).order_by(
+            Opportunity.reviewed_at.desc().nullslast(), Opportunity.id.desc()
+        )
+    else:
+        statement = select(Opportunity).order_by(Opportunity.id.desc())
+
+    published_subquery = (
+        select(Publication.opportunity_id)
+        .where(Publication.status == "published")
     )
-    if status:
-        statement = statement.where(Opportunity.review_status == status)
+
+    if status in ("actionable", None):
+        cleanup_closed_opportunities(db)
+        statement = statement.where(
+            Opportunity.review_status.in_(("pending_review", "needs_review"))
+        )
+        statement = statement.where(Opportunity.classification != "closed_or_filled_job")
+        statement = statement.where(Opportunity.id.notin_(published_subquery))
+    elif status == "pending_review":
+        cleanup_closed_opportunities(db)
+        statement = statement.where(Opportunity.review_status == "pending_review")
+        statement = statement.where(Opportunity.classification != "closed_or_filled_job")
+        statement = statement.where(Opportunity.id.notin_(published_subquery))
+    elif status == "needs_review":
+        cleanup_closed_opportunities(db)
+        statement = statement.where(Opportunity.review_status == "needs_review")
+        statement = statement.where(Opportunity.classification != "closed_or_filled_job")
+        statement = statement.where(Opportunity.id.notin_(published_subquery))
+    elif status == "approved":
+        statement = statement.where(Opportunity.review_status == "approved")
+        statement = statement.where(Opportunity.id.notin_(published_subquery))
+    elif status == "published":
+        statement = statement.where(Opportunity.id.in_(published_subquery))
+    elif status == "rejected":
+        statement = statement.where(Opportunity.review_status == "rejected")
+        statement = statement.where(Opportunity.classification != "closed_or_filled_job")
+    elif status == "closed":
+        statement = statement.where(
+            or_(
+                Opportunity.classification == "closed_or_filled_job",
+                Opportunity.approval_reason.ilike("%closed%"),
+            )
+        )
+    # status == "all" applies no status filter
+
     if risk_only:
         statement = statement.where(Opportunity.risk_score > 0)
     if classification:

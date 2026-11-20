@@ -107,6 +107,23 @@ def main() -> int:
                 file=sys.stderr,
             )
             raise
+
+        # 4. Batch admin review alerts: notify admin on Telegram when reaching batch size
+        try:
+            from app.services.alerts import send_batch_review_alert
+
+            dispatched = send_batch_review_alert(
+                db,
+                settings=settings,
+                min_batch_size=settings.admin_alert_batch_size,
+            )
+            if dispatched:
+                print(
+                    f"Dispatched {dispatched} opportunities in admin Telegram batch review alert."
+                )
+        except Exception as alert_exc:
+            print(f"Warning: batch review alert notification issue: {alert_exc}")
+
         return 0 if outcome.status in ("succeeded", "completed", "skipped") else 1
     except Exception as exc:
         print(f"Error during collection/publication execution: {exc}", file=sys.stderr)

@@ -141,6 +141,10 @@ class Opportunity(Base):
     def external_id(self) -> str | None:
         return self.post.external_id if self.post else None
 
+    @property
+    def is_published(self) -> bool:
+        return any(p.status == "published" for p in self.publications)
+
 
 class Publication(Base):
     __tablename__ = "publications"

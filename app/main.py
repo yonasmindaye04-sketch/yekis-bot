@@ -17,6 +17,7 @@ from app.routers import (
     opportunities,
     publications,
     sources,
+    telegram,
 )
 from app.schema import ensure_schema, model_tables_present
 from app.security.auth import validate_security_config
@@ -88,6 +89,7 @@ app.include_router(opportunities.router, prefix=settings.api_prefix)
 app.include_router(publications.router, prefix=settings.api_prefix)
 app.include_router(analytics.router, prefix=settings.api_prefix)
 app.include_router(autonomy.router, prefix=settings.api_prefix)
+app.include_router(telegram.router, prefix=settings.api_prefix)
 app.mount("/admin", StaticFiles(directory=STATIC_DIR, html=True), name="admin")
 
 

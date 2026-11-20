@@ -91,6 +91,7 @@ class OpportunityRead(BaseModel):
     approved_at: datetime | None = None
     approved_by: str | None = None
     quarantined: bool = False
+    is_published: bool = False
     # --- Extracted engagement details ---
     deadline: str | None = None
     application_url: str | None = None
