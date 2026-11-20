@@ -1372,7 +1372,9 @@
       try {
         const res = await api("/api/v1/ingestion/collect", { method: "POST" });
         if (Array.isArray(res) && res[0] && res[0].status === "cloud_worker_scheduled") {
-          toast("Telegram scraper runs continuously on GitHub Actions. To trigger an instant scrape, open GitHub Actions.", false);
+          toast("Telegram scraper runs continuously on GitHub Actions. Opening GitHub Actions runner…", false);
+          const ghUrl = res[0].actions_url || "https://github.com/yonasmindaye04-sketch/yekis-bot/actions/workflows/collector.yml";
+          window.open(ghUrl, "_blank");
         } else {
           toast("Collection request completed. Refreshing review queue…");
         }

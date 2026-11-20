@@ -52,6 +52,9 @@ async def trigger_collection(
     # In split deployment, Vercel serverless runs the API while GitHub Actions runs the scraper.
     # If Telegram credentials are not present on this host, do NOT fail the sources in the DB.
     if not settings.telegram_api_id or not settings.telegram_api_hash:
+        github_url = (
+            "https://github.com/yonasmindaye04-sketch/yekis-bot/actions/workflows/collector.yml"
+        )
         return [
             {
                 "source_id": 0,
@@ -64,6 +67,7 @@ async def trigger_collection(
                     "Live scraping runs on hourly GitHub Actions runners. "
                     "Visit GitHub Actions to trigger an instant run."
                 ),
+                "actions_url": github_url,
             }
         ]
 

@@ -82,6 +82,18 @@ if settings.cors_origin_list:
         allow_headers=["X-API-Key", "Authorization", "Content-Type"],
     )
 
+
+@app.middleware("http")
+async def add_no_cache_headers(request, call_next):
+    """Ensure admin static files are never cached by browsers so UI updates land instantly."""
+    response = await call_next(request)
+    path = request.url.path
+    if path.startswith("/admin") or path.endswith((".html", ".js", ".css")):
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
+
 app.include_router(health.router)
 app.include_router(sources.router, prefix=settings.api_prefix)
 app.include_router(ingestion.router, prefix=settings.api_prefix)
