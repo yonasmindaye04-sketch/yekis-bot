@@ -38,9 +38,38 @@ def list_sources(
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
 ):
-    return list(
+    sources = list(
         db.scalars(select(Source).order_by(Source.id.desc()).limit(limit).offset(offset)).all()
     )
+    # Self-healing: if an ephemeral Vercel invocation wrote TelegramNotConfigured into a source,
+    # clear it automatically so active sources operate normally on GitHub Actions.
+    healed = False
+    for s in sources:
+        if s.last_error and "TelegramNotConfigured" in s.last_error:
+            s.last_error = None
+            s.consecutive_failures = 0
+            s.next_attempt_at = None
+            healed = True
+    if healed:
+        db.commit()
+    return sources
+
+
+@router.post(
+    "/{source_id}/reset-health",
+    response_model=SourceRead,
+    dependencies=[Depends(require_role("admin", "collector"))],
+)
+def reset_source_health(source_id: int, db: Session = Depends(get_db)):
+    source = db.get(Source, source_id)
+    if source is None:
+        raise _not_found()
+    source.last_error = None
+    source.consecutive_failures = 0
+    source.next_attempt_at = None
+    db.commit()
+    db.refresh(source)
+    return source
 
 
 @router.get(

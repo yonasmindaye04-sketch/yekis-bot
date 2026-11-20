@@ -43,11 +43,32 @@ async def trigger_collection(
     limit: int = Query(default=10, ge=1, le=50),
     db: Session = Depends(get_db),
 ):
+    from app.config import get_settings
     from app.integrations.telegram.client import TelegramNotConfigured, TelethonClient
     from app.integrations.telegram.collector import collect_sources
 
+    settings = get_settings()
+
+    # In split deployment, Vercel serverless runs the API while GitHub Actions runs the scraper.
+    # If Telegram credentials are not present on this host, do NOT fail the sources in the DB.
+    if not settings.telegram_api_id or not settings.telegram_api_hash:
+        return [
+            {
+                "source_id": 0,
+                "status": "cloud_worker_scheduled",
+                "fetched": 0,
+                "ingested": 0,
+                "duplicates": 0,
+                "error": None,
+                "message": (
+                    "Live scraping runs on hourly GitHub Actions runners. "
+                    "Visit GitHub Actions to trigger an instant run."
+                ),
+            }
+        ]
+
     try:
-        client = TelethonClient()
+        client = TelethonClient(settings=settings)
         try:
             source_ids = [source_id] if source_id else None
             results = await collect_sources(db, client, source_ids=source_ids, limit=limit)
