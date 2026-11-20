@@ -304,15 +304,41 @@ Requires any authenticated role. Query:
 
 | Parameter | Default | Meaning |
 |---|---|---|
-| `status` | none | One of `pending_review`, `needs_review`, `approved`, `rejected`. |
+| `status` | none | `actionable` (pending and needs review, excluding published and closed), `pending_review`, `needs_review`, `approved`, `published`, `rejected`, `closed`, or `all`. |
+| `sort` | `newest` | `newest`, `quality`, or `updated`. |
 | `risk_only` | `false` | When true, only `risk_score > 0`. |
 | `classification` | none | One exact classification value (see the taxonomy below). |
 | `group` | none | One of `freelance`, `employment`, `education`, `announcement`, `suspicious`, `ambiguous`. |
 | `quarantined` | none | When `true`, only quarantined opportunities. |
+| `created_from` | none | Inclusive lower bound on the collection date (`YYYY-MM-DD`). |
+| `created_to` | none | Inclusive upper bound on the collection date (`YYYY-MM-DD`). |
 | `limit` | `50` | Page size, max 200. |
 | `offset` | `0` | Page offset. |
 
-Ordering is `quality_score DESC, id DESC`.
+Ordering is `id DESC` by default.
+
+### `GET /api/v1/opportunities/queue-summary`
+
+Requires any authenticated role. Returns the exact size of every queue, so a
+client never has to infer a total from a paged list:
+
+```json
+{
+  "pending_review": 0,
+  "needs_review": 497,
+  "approved": 13,
+  "rejected": 261,
+  "closed": 87,
+  "published": 6,
+  "actionable": 497,
+  "total": 858
+}
+```
+
+`actionable` is `pending_review + needs_review` and excludes anything that is
+already published or marked closed. It is the number the dashboard shows next
+to the review tab, so an empty `pending_review` queue can never be mistaken for
+an empty review backlog.
 
 The classification groups map onto the taxonomy:
 

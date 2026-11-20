@@ -1190,21 +1190,53 @@
         if (group) params.set("group", group);
         const sort = $("reviewSort") ? $("reviewSort").value : "newest";
         if (sort) params.set("sort", sort);
+        // The created date range is inclusive on both ends.
+        const from = $("reviewDateFrom") ? $("reviewDateFrom").value : "";
+        const to = $("reviewDateTo") ? $("reviewDateTo").value : "";
+        if (from) params.set("created_from", from);
+        if (to) params.set("created_to", to);
 
-        const items = await api("/api/v1/opportunities?" + params.toString());
+        const [items, summary] = await Promise.all([
+          api("/api/v1/opportunities?" + params.toString()),
+          api("/api/v1/opportunities/queue-summary").catch(() => null)
+        ]);
         state.opportunities = items;
+        state.queueSummary = summary;
+
+        // The badge is the size of the whole review backlog, never the number
+        // of rows in the current page or the current filter.
+        if (summary) $("badgePending").textContent = summary.actionable;
+
         list.innerHTML = items.length
           ? items.map(reviewCard).join("")
-          : '<div class="empty">No opportunities match the selected criteria.</div>';
-
-        // Update badge for pending review
-        if (!st || st === "pending_review") {
-          $("badgePending").textContent = items.length;
-        }
+          : emptyReviewState(st, summary);
       } catch (err) {
         list.innerHTML = `<div class="error">${esc(err.message)}</div>`;
         if (err.status === 401) showAuth();
       }
+    }
+
+    // An empty list is not the same as an empty queue. Say which one it is, and
+    // offer the one click that shows the waiting work.
+    function emptyReviewState(status, summary) {
+      const actionable = summary ? summary.actionable : null;
+      if (actionable === null) {
+        return '<div class="empty">No opportunities match the selected criteria.</div>';
+      }
+      if (actionable > 0) {
+        return `<div class="empty">No opportunities match this filter. ` +
+          `<strong>${actionable}</strong> item(s) are waiting in the actionable queue. ` +
+          `<button class="small" id="showActionableBtn" style="margin-left: 8px;">Show actionable</button></div>`;
+      }
+      if (status === "all" || !status) {
+        return '<div class="empty">The queue is empty. Nothing is waiting for review.</div>';
+      }
+      return '<div class="empty">Nothing in this filter, and nothing is waiting in the actionable queue.</div>';
+    }
+
+    async function showActionableQueue() {
+      $("reviewStatus").value = "actionable";
+      await loadReview();
     }
 
     async function reviewAction(id, decision) {
@@ -2133,10 +2165,16 @@
     $("refreshAutonomyBtn").addEventListener("click", loadAutonomy);
     $("saveAutonomyBtn").addEventListener("click", saveAutonomy);
     if ($("reviewGroup")) $("reviewGroup").addEventListener("change", loadReview);
+    if ($("reviewDateFrom")) $("reviewDateFrom").addEventListener("change", loadReview);
+    if ($("reviewDateTo")) $("reviewDateTo").addEventListener("change", loadReview);
     $("refreshAnalyticsBtn").addEventListener("click", loadAnalytics);
 
     // Delegate opportunity card actions
     $("reviewList").addEventListener("click", (e) => {
+      if (e.target.closest("#showActionableBtn")) {
+        showActionableQueue();
+        return;
+      }
       const btn = e.target.closest("button[data-action]");
       if (!btn) return;
       const id = Number(btn.dataset.id);

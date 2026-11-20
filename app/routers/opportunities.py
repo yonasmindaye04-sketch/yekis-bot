@@ -1,5 +1,7 @@
+from datetime import date, datetime, time
+
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
@@ -80,6 +82,8 @@ def list_opportunities(
         pattern="^(freelance|employment|education|announcement|suspicious|ambiguous)$",
     ),
     quarantined: bool | None = Query(default=None),
+    created_from: date | None = Query(default=None),
+    created_to: date | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
@@ -147,13 +151,78 @@ def list_opportunities(
         )
     if quarantined is not None:
         statement = statement.where(Opportunity.quarantined.is_(quarantined))
+    # The date range includes both days: the upper bound is the last instant of
+    # the selected day, so a post collected at any time that day is included.
+    if created_from is not None:
+        statement = statement.where(
+            Opportunity.created_at >= datetime.combine(created_from, time.min)
+        )
+    if created_to is not None:
+        statement = statement.where(
+            Opportunity.created_at <= datetime.combine(created_to, time.max)
+        )
     return list(db.scalars(statement.limit(limit).offset(offset)).all())
 
 
 @router.get(
-    "/export",
+    "/queue-summary",
     dependencies=[Depends(require_role(*READ_ROLES))],
 )
+def queue_summary(db: Session = Depends(get_db)) -> dict:
+    """Exact queue counts, independent of the page size of the list endpoint.
+
+    The dashboard shows the size of the review backlog next to the tab. Two
+    things make that number wrong if it is taken from the list response: the
+    page size caps it, and a narrowed filter reports zero even though work is
+    waiting in another queue - which is how an operator ends up looking at an
+    empty review queue while hundreds of posts still need a decision.
+    """
+    from app.services.review import cleanup_closed_opportunities
+
+    cleanup_closed_opportunities(db)
+
+    published = select(Publication.opportunity_id).where(
+        Publication.status == "published"
+    )
+    closed = or_(
+        Opportunity.classification == "closed_or_filled_job",
+        # coalesce keeps the expression boolean: comparing a NULL
+        # approval_reason with ILIKE yields NULL, and the negation below would
+        # silently drop every row that was never rejected for being closed.
+        func.coalesce(Opportunity.approval_reason, "").ilike("%closed%"),
+    )
+
+    counts: dict[str, int] = {"pending_review": 0, "needs_review": 0, "approved": 0}
+    rows = db.execute(
+        select(Opportunity.review_status, func.count(Opportunity.id))
+        .where(Opportunity.review_status.in_(tuple(counts)))
+        .where(Opportunity.classification != "closed_or_filled_job")
+        .where(Opportunity.id.notin_(published))
+        .group_by(Opportunity.review_status)
+    ).all()
+    for status_name, count in rows:
+        counts[status_name] = int(count)
+
+    rejected = db.scalar(
+        select(func.count(Opportunity.id))
+        .where(Opportunity.review_status == "rejected")
+        .where(~closed)
+    )
+    closed_count = db.scalar(select(func.count(Opportunity.id)).where(closed))
+    published_count = db.scalar(
+        select(func.count(Opportunity.id)).where(Opportunity.id.in_(published))
+    )
+    total = db.scalar(select(func.count(Opportunity.id)))
+
+    return {
+        **counts,
+        "rejected": int(rejected or 0),
+        "closed": int(closed_count or 0),
+        "published": int(published_count or 0),
+        # The single number the dashboard shows as the review backlog.
+        "actionable": counts["pending_review"] + counts["needs_review"],
+        "total": int(total or 0),
+    }
 def export_opportunities(
     status: str | None = Query(default="approved"),
     limit: int = Query(default=100, ge=1, le=500),
