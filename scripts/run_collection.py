@@ -27,6 +27,11 @@ def _write_step_summary(summary: dict[str, object]) -> None:
         "",
         f"- mode: {summary.get('mode')}",
         f"- channel: {summary.get('channel') or 'not set'}",
+    ]
+    collected = summary.get("collected")
+    if collected is not None:
+        lines.append(f"- posts collected: {collected}")
+    lines += [
         f"- opportunities evaluated: {summary.get('evaluated')}",
         f"- decisions: {summary.get('decisions') or 'none'}",
         f"- published: {summary.get('published')}",
@@ -45,6 +50,20 @@ def _write_step_summary(summary: dict[str, object]) -> None:
             Path(path).write_text(text, encoding="utf-8")
         except OSError as exc:  # pragma: no cover - depends on the runner
             print(f"(could not write the step summary: {exc})")
+
+
+def _collected_count(outcome) -> int:
+    """How many posts the collection step actually stored.
+
+    The run summary has to distinguish "the collector found nothing" from
+    "the collector stored nothing", because the first one is normal and the
+    second one is a failure.
+    """
+    value = getattr(outcome, "value", None)
+    if not isinstance(value, dict):
+        return 0
+    sources = value.get("sources") or []
+    return sum(int(source.get("ingested") or 0) for source in sources)
 
 
 def main() -> int:
@@ -120,6 +139,7 @@ def main() -> int:
             summary: dict[str, object] = {
                 "mode": config.mode,
                 "channel": config.channel or "",
+                "collected": _collected_count(outcome),
                 "evaluated": 0,
                 "decisions": {},
                 "published": 0,
