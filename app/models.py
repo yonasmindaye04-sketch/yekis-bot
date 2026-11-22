@@ -54,6 +54,9 @@ class CollectedPost(Base):
     original_url: Mapped[str | None] = mapped_column(String(1500))
     content_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     collected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    # When the post was published in the channel. NULL for posts collected
+    # before this column existed; the backfill script fills them in.
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     source: Mapped[Source] = relationship(back_populates="posts")
     opportunity: Mapped["Opportunity | None"] = relationship(back_populates="post", uselist=False)

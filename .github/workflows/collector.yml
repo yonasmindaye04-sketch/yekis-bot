@@ -59,6 +59,19 @@ jobs:
         run: |
           python -m scripts.migrate
 
+      # The first collections scraped the whole history of the channels, so
+      # most collected posts were published years ago. This step reads the
+      # real publication date of every post that was collected without one,
+      # which is what lets the age rules work.
+      - name: Backfill Post Publication Dates
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          TELEGRAM_API_ID: ${{ secrets.TELEGRAM_API_ID }}
+          TELEGRAM_API_HASH: ${{ secrets.TELEGRAM_API_HASH }}
+          TELEGRAM_SESSION_PATH: "var/telegram_user"
+        run: |
+          python -m scripts.backfill_post_dates
+
       - name: Seed Production Sources
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
@@ -113,6 +126,10 @@ jobs:
           # in this run is collected by the next one, and the publishing phase
           # below is always reached.
           COLLECTION_TIME_BUDGET_SECONDS: "900"
+          # Posts published in the channel more than this many days ago are
+          # not collected. The channels carry years of history and an advert
+          # from last year is not an opportunity anybody can act on.
+          COLLECTION_MAX_POST_AGE_DAYS: "30"
           ADMIN_ALERTS_ENABLED: "false"
           EXTRACTION_PROVIDER: ${{ secrets.EXTRACTION_PROVIDER || 'llm' }}
           # The application reads LLM_BASE_URL (field llm_base_url). The old

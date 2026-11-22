@@ -34,6 +34,11 @@ class Settings(BaseSettings):
     # Bot session used by the publisher when no bot token is configured.
     telegram_bot_session_path: str = "var/telegram_bot"
     telegram_fetch_limit: int = 100
+    # Posts published in the channel more than this many days ago are not
+    # collected at all. The channels carry years of history, and an advert
+    # from last year is not an opportunity anybody can act on. Set to 0 to
+    # keep every post regardless of its age.
+    collection_max_post_age_days: int = 30
     # Optional proxy for Telegram traffic. Use it to route MTProto through a
     # Cloudflare tunnel or a Cloudflare WARP SOCKS5 proxy, which is the
     # supported way to reach Telegram from a restricted network.

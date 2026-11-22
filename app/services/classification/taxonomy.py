@@ -99,6 +99,87 @@ JOB_CATEGORIES: Final[tuple[str, ...]] = (
     "other",
 )
 
+#: Free-text category words that map onto the canonical JOB_CATEGORIES
+#: vocabulary.
+#:
+#: The dashboard stores what a human typed ("graphics", "video editor"), the
+#: extractor emits the canonical values ("design", "media"). Without this
+#: bridge the two never matched and every matching opportunity was silently
+#: blocked by the category allowlist.
+CATEGORY_SYNONYMS: Final[dict[str, str]] = {
+    # design
+    "graphic design": "design",
+    "graphics": "design",
+    "graphic designer": "design",
+    "illustration": "design",
+    "illustrator": "design",
+    "animation": "design",
+    "animator": "design",
+    "motion graphics": "design",
+    "ui ux": "design",
+    "ui/ux": "design",
+    "ux ui": "design",
+    "logo": "design",
+    "branding": "design",
+    # media
+    "video": "media",
+    "video editor": "media",
+    "video editing": "media",
+    "photography": "media",
+    "photo": "media",
+    "audio": "media",
+    "music": "media",
+    "content creator": "media",
+    "youtube": "media",
+    # software
+    "software development": "software",
+    "web development": "software",
+    "web": "software",
+    "programming": "software",
+    "developer": "software",
+    "it": "software",
+    # marketing
+    "digital marketing": "marketing",
+    "sales": "marketing",
+    "seo": "marketing",
+    "social media": "marketing",
+    # writing
+    "content writer": "writing",
+    "translation": "writing",
+    # data
+    "data analysis": "data",
+    "data analyst": "data",
+    "data science": "data",
+    # education
+    "teaching": "education",
+    "teacher": "education",
+    "tutor": "education",
+    "tutoring": "education",
+    # admin
+    "administration": "admin",
+    "human resources": "admin",
+    "hr": "admin",
+    "office": "admin",
+}
+
+
+def canonical_category(value: str | None) -> str | None:
+    """Map a category word onto the canonical JOB_CATEGORIES vocabulary.
+
+    Returns ``None`` when the value cannot be mapped, which keeps the
+    classification names ("freelance_job") usable as allowlist entries in
+    their own right.
+    """
+    if not value:
+        return None
+    key = " ".join(str(value).strip().lower().split())
+    if not key:
+        return None
+    if key in JOB_CATEGORIES:
+        return key
+    return CATEGORY_SYNONYMS.get(key)
+
+
 #: Risk levels produced by the deterministic risk engine.
 RISK_LEVELS: Final[tuple[str, ...]] = ("none", "low", "medium", "high", "critical")
 

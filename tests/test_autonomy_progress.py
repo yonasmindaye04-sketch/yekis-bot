@@ -86,7 +86,13 @@ def autonomy_settings():
     )
 
 
-def _opportunity(db_session, source, external_id: str, text: str = JOB_POST) -> Opportunity:
+def _opportunity(
+    db_session,
+    source,
+    external_id: str,
+    text: str = JOB_POST,
+    published_at: datetime | None = None,
+) -> Opportunity:
     from app.services.ingestion import ingest_post
 
     opportunity, _created = ingest_post(
@@ -94,6 +100,7 @@ def _opportunity(db_session, source, external_id: str, text: str = JOB_POST) -> 
         source_id=source.id,
         external_id=external_id,
         original_text=text,
+        published_at=published_at,
     )
     return opportunity
 
@@ -191,9 +198,12 @@ def test_a_stale_opportunity_is_closed_instead_of_waiting_for_a_human(
 ):
     from app.models import ReviewEvent
 
-    stale = _opportunity(db_session, source, "stale-1")
-    stale.created_at = datetime.now(UTC) - timedelta(
-        hours=autonomy_settings.autonomy_stale_after_hours + 24
+    stale = _opportunity(
+        db_session,
+        source,
+        "stale-1",
+        published_at=datetime.now(UTC)
+        - timedelta(hours=autonomy_settings.autonomy_stale_after_hours + 24),
     )
     db_session.commit()
 

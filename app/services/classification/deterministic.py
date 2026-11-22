@@ -38,6 +38,16 @@ CLOSED_JOB_PATTERNS: tuple[str, ...] = (
     r"\b(?:applications?|submissions?|proposals?)\s+(?:are\s+|have\s+been\s+)?(?:closed|ended)\b",
     r"\b(?:application\s+closed|applications\s+closed|hiring\s+closed|vacancy\s+closed)\b",
     r"\b(?:position\s+(?:has\s+been\s+)?filled|vacancy\s+(?:has\s+been\s+)?filled)\b",
+    # "this post has been filled", "the role is filled", "we have hired".
+    (
+        r"\b(?:post|ad|advert|advertisement|listing|opportunity|role|job|position|"
+        r"vacancy)\s+(?:has\s+been\s+|was\s+|is\s+|been\s+)*(?:filled|taken|hired|"
+        r"closed|occupied)\b"
+    ),
+    r"\bwe\s+(?:have\s+|has\s+)?(?:hired|filled|taken|closed)\b",
+    r"\bno\s+longer\s+(?:open|available|active)\b",
+    r"\b(?:closed|no\s+longer\s+available)\s+for\s+(?:applications?|proposals?|bids?)\b",
+    r"\bnot\s+accepting\s+(?:applications?|proposals?|bids?|candidates?)\b",
     r"\b(?:no\s+longer\s+accepting\s+(?:applications?|proposals?|candidates?|resumes?|cvs?|submissions?|bids?))\b",
     r"\b(?:already\s+filled|already\s+taken|already\s+hired)\b",
     r"\bstatus\s*:\s*(?:closed|filled|completed|expired)\b",
@@ -68,6 +78,10 @@ SEEKING = (
     # "seeking a consultant" is an offer, "seeking a job" is not.
     (r"\b(?:seeking|searching for)(?!\s+(?:a\s+|an\s+|the\s+)?"
     r"(?:jobs?|work|employment)\b)"),
+    # "Job: Web Development", "Opportunity: logo design". The labelled form
+    # is how the channels write short adverts, and it is an offer even
+    # without a budget line.
+    (r"\b(?:job|opportunity|advert|advertisement|vacancy|position)\s*:\s*\S"),
     # "React developer needed", "designer needed".
     (r"\b(?:developer|designer|engineer|writer|translator|editor|copywriter|"
     r"marketer|analyst|consultant|freelancer|expert|specialist|programmer|"
@@ -137,6 +151,8 @@ APPLICATION = (
      r"the\s+post)\b"),
     (r"\b(?:interested|applicants|candidates)\s+(?:should|may|can|must|are\s+"
      r"(?:invited|requested|encouraged))\b"),
+    # "Contact: brehanu@gmail.com", "Telegram: @someone".
+    (r"\bcontact\s*:\s*\S|\b(?:telegram|email|phone|whatsapp)\s*:\s*\S"),
 )
 
 #: Money, rate, or budget language.

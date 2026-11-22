@@ -48,6 +48,7 @@ from app.services.classification.taxonomy import (
     DEFAULT_AUTO_APPROVAL_THRESHOLD,
     PUBLISHABLE_SET,
     SYSTEM_ACTOR,
+    canonical_category,
 )
 
 logger = logging.getLogger(__name__)
@@ -331,10 +332,33 @@ def _source_allowed(opportunity: Opportunity, config: AutonomyConfig) -> bool:
 
 
 def _category_allowed(opportunity: Opportunity, config: AutonomyConfig) -> bool:
+    """The category allowlist accepts three kinds of entry.
+
+    An empty allowlist allows everything. Otherwise an entry may be the
+    extracted category ("design"), a synonym of it ("graphics"), or a
+    taxonomy classification ("freelance_job"). The synonym bridge is what
+    makes a list typed by a human work against the vocabulary the extractor
+    actually produces.
+    """
     if not config.approved_categories:
         return True
+    entries = {str(value).strip().lower() for value in config.approved_categories}
+    entries.discard("")
+    canonical_entries = {
+        canonical for canonical in (canonical_category(entry) for entry in entries) if canonical
+    }
+
+    classification = (opportunity.classification or "").strip().lower()
+    if classification and classification in entries:
+        return True
+
     category = (opportunity.category or "").strip().lower()
-    return category in config.approved_categories
+    if not category:
+        return False
+    if category in entries:
+        return True
+    canonical = canonical_category(category)
+    return bool(canonical) and canonical in canonical_entries
 
 
 def _content_valid(opportunity: Opportunity) -> bool:
@@ -547,9 +571,14 @@ def _decide_for_autonomy(
 
     if not _category_allowed(opportunity, config):
         details["category_allowed"] = False
+        details["category"] = opportunity.category or ""
+        details["approved_categories"] = list(config.approved_categories)
         return (
             DECISION_HUMAN_REVIEW_REQUIRED,
-            "The job category is not approved for autonomous publishing.",
+            (
+                f"The job category '{opportunity.category or 'unknown'}' is not in "
+                f"the approved categories ({', '.join(config.approved_categories)})."
+            ),
             details,
         )
 
@@ -863,10 +892,14 @@ def sweep_stale_opportunities(
     candidates = list(
         db.scalars(
             select(Opportunity)
+            .join(CollectedPost, Opportunity.collected_post_id == CollectedPost.id)
             .where(
                 Opportunity.review_status.in_(("pending_review", "needs_review")),
-                Opportunity.approval_method.is_(None),
-                Opportunity.created_at < stale_before,
+                # The publication date of the post, not the day we scraped
+                # it. A post from three years ago is stale no matter when
+                # the collector found it.
+                func.coalesce(CollectedPost.published_at, CollectedPost.collected_at)
+                < stale_before,
             )
         ).all()
     )

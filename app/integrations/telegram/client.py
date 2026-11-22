@@ -14,6 +14,7 @@ git-ignored, and is never logged.
 from __future__ import annotations
 
 import logging
+from datetime import UTC, datetime
 from pathlib import Path
 
 from app.config import Settings
@@ -116,6 +117,28 @@ class TelethonClient:
         if self._client is not None:
             await self._client.disconnect()
             self._client = None
+
+    async def get_message_dates(
+        self, channel: str, ids: list[int]
+    ) -> dict[int, datetime]:
+        """The publication date of the given messages of a channel.
+
+        Used to fill in the date of posts that were collected before the
+        column existed. Missing messages are simply absent from the result.
+        """
+        client = await self._ensure_client()
+        reference = channel_reference(channel)
+        entity = await client.get_entity(reference)
+        messages = await client.get_messages(entity, ids=list(ids))
+        dates: dict[int, datetime] = {}
+        for message in messages:
+            if message is None or message.date is None:
+                continue
+            published_at = message.date
+            if published_at.tzinfo is None:
+                published_at = published_at.replace(tzinfo=UTC)
+            dates[int(message.id)] = published_at
+        return dates
 
     async def __aenter__(self) -> TelethonClient:
         await self._ensure_client()

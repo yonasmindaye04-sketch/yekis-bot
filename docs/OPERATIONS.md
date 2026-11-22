@@ -409,6 +409,29 @@ Look at:
 - `consecutive_failures` — reset on success.
 - `last_error` — bounded error text.
 
+### Posts that are too old to matter
+
+The channels carry years of history. Two rules keep that history out of the
+queue:
+
+- `COLLECTION_MAX_POST_AGE_DAYS` (default 30) - a post published longer ago
+  is not collected at all. The collector counts it as `too_old`, moves its
+  checkpoint past it and continues. Set it to 0 to keep every post.
+- the stale sweep - a post that is already in the queue and is older than
+  `AUTONOMY_STALE_AFTER_HOURS` is closed automatically, with a review event
+  written for the audit trail.
+
+The age of a post is the date it was **published in the channel**, not the
+day it was scraped. That date is stored on `collected_posts.published_at`.
+Posts collected before that column existed have no date, so the first run of
+the backfill script fills them in:
+
+```bash
+python -m scripts.backfill_post_dates
+```
+
+The scheduled workflow runs it as its own step, before the collection.
+
 ### Collector failure modes
 
 | Symptom | Action |
@@ -611,6 +634,22 @@ Consequences for the operator:
 curl -H "X-API-Key: $YI_ADMIN_KEY" http://localhost:8100/api/v1/sources
 # last_success_at is the moment of the last successful collection
 ```
+
+### The category allowlist speaks two vocabularies
+
+`approved_categories` is a list of words. An entry matches when it equals the
+category the extractor produced, a synonym of it, or a taxonomy
+classification:
+
+| Kind | Example entries |
+|---|---|
+| canonical categories | `software`, `design`, `marketing`, `media`, `writing`, `data`, `admin`, `education`, `other` |
+| synonyms (mapped automatically) | `graphics` -> design, `animator` -> design, `illustrator` -> design, `motion graphics` -> design, `video editor` -> media, `teacher` -> education, `data analyst` -> data |
+| taxonomy classifications | `freelance_job`, `consulting_opportunity`, `remote_contract` |
+
+An empty list allows every category. An entry that matches nothing keeps the
+opportunity in human review, and the decision log says which category was
+rejected and what the list held.
 
 ### The queue has to move
 

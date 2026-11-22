@@ -15,6 +15,7 @@ follows from it:
 """
 
 import hashlib
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -52,6 +53,19 @@ class SourceInactiveError(IngestionError):
 
 class DuplicatePostError(IngestionError):
     code = "duplicate_post"
+    status_code = 409
+
+
+class PostTooOldError(IngestionError):
+    """The post was published long ago and cannot be acted on any more.
+
+    This is not a failure: the collector skips the post, advances its
+    checkpoint and moves on. A channel whose history reaches back years
+    would otherwise fill the review queue with posts from the previous
+    decade.
+    """
+
+    code = "post_too_old"
     status_code = 409
 
 
@@ -117,6 +131,8 @@ def ingest_post(
     external_id: str,
     original_text: str,
     original_url: str | None = None,
+    published_at: datetime | None = None,
+    max_age_days: int | None = None,
     require_active_source: bool = True,
     extracted: ExtractedOpportunity | None = None,
     provider: ExtractionProvider | None = None,
@@ -128,6 +144,11 @@ def ingest_post(
     post as already handled. The pre-check is only a fast path: the unique
     constraint is the real guarantee, and an IntegrityError is translated into
     the same typed error instead of leaking a 500.
+
+    ``published_at`` is the date the post was published in the channel. When
+    ``max_age_days`` is given and the post is older than that, a
+    :class:`PostTooOldError` is raised before any work is done: the post is
+    never stored, never extracted and never queued for review.
     """
 
     source = db.get(Source, source_id)
@@ -135,6 +156,15 @@ def ingest_post(
         raise SourceNotFoundError(f"Source {source_id} not found")
     if require_active_source and not source.is_active:
         raise SourceInactiveError(f"Source {source_id} is inactive")
+
+    if max_age_days and published_at is not None:
+        if published_at.tzinfo is None:
+            published_at = published_at.replace(tzinfo=UTC)
+        if published_at < datetime.now(UTC) - timedelta(days=max_age_days):
+            raise PostTooOldError(
+                f"Post {external_id} was published on {published_at.date().isoformat()} "
+                f"and is older than {max_age_days} days."
+            )
 
     existing = db.scalar(
         select(CollectedPost.id).where(
@@ -151,6 +181,7 @@ def ingest_post(
         original_text=original_text,
         original_url=original_url,
         content_hash=content_hash(original_text),
+        published_at=published_at,
     )
     db.add(post)
     try:

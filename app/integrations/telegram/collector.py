@@ -25,7 +25,12 @@ from app.config import settings as default_settings
 from app.db import SessionLocal
 from app.integrations.telegram.base import ChannelMessage, TelegramClientPort
 from app.models import Source
-from app.services.ingestion import DuplicatePostError, IngestionError, ingest_post
+from app.services.ingestion import (
+    DuplicatePostError,
+    IngestionError,
+    PostTooOldError,
+    ingest_post,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +55,7 @@ class CollectorResult:
     fetched: int = 0
     ingested: int = 0
     duplicates: int = 0
+    too_old: int = 0
     last_message_id: int | None = None
     error: str | None = None
     skipped_reason: str | None = None
@@ -70,9 +76,12 @@ async def collect_source(
     limit: int | None = None,
     now: datetime | None = None,
     deadline: float | None = None,
+    max_age_days: int | None = None,
 ) -> CollectorResult:
     now = now or utcnow()
     fetch_limit = limit or default_settings.telegram_fetch_limit
+    if max_age_days is None:
+        max_age_days = default_settings.collection_max_post_age_days
 
     if source.source_type != "telegram":
         return CollectorResult(source.id, "skipped", skipped_reason="not_a_telegram_source")
@@ -114,11 +123,17 @@ async def collect_source(
                     external_id=str(message.message_id),
                     original_text=message.text,
                     original_url=message.url,
+                    published_at=message.posted_at,
+                    max_age_days=max_age_days,
                 )
                 result.ingested += 1
                 result.message_ids.append(message.message_id)
             except DuplicatePostError:
                 result.duplicates += 1
+            except PostTooOldError:
+                # Not a failure: the post is too old to matter. The
+                # checkpoint still moves past it so it is never seen again.
+                result.too_old += 1
             except IngestionError as exc:
                 # A single bad message must not advance the checkpoint past it.
                 raise RuntimeError(

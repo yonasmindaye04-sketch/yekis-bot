@@ -189,6 +189,7 @@
     @media (max-width: 840px) { .grid-2 { grid-template-columns: 1fr; } }
 
     label { display: block; font-size: 12px; font-weight: 500; color: var(--text-muted); margin-bottom: 6px; }
+    .hint { font-size: 11px; color: var(--text-dim); line-height: 1.5; margin: 6px 0 0; }
     input, select, textarea {
       width: 100%;
       padding: 9px 12px;
@@ -870,6 +871,14 @@
             <div>
               <label for="autonomyCategories">Approved Job Categories (comma separated)</label>
               <input id="autonomyCategories" placeholder="software, design, writing">
+              <p class="hint">
+                Empty means every category is allowed. Canonical values:
+                software, design, marketing, media, writing, data, admin, education, other.
+                Common words are understood too (graphics and animator map to design,
+                video editor maps to media), and a classification name such as
+                freelance_job works as an entry. An entry that matches nothing keeps
+                the opportunity in human review.
+              </p>
             </div>
           </div>
 
