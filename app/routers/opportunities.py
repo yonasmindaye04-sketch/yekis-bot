@@ -2,7 +2,7 @@ from datetime import date, datetime, time
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.config import get_settings
 from app.db import get_db
@@ -89,16 +89,27 @@ def list_opportunities(
     db: Session = Depends(get_db),
 ):
     # Ordering: newest by default so fresh and updated jobs always arrive at the top
+    # The publications are loaded with a second query instead of one query
+    # per row. The `is_published` field of the answer reads that
+    # relationship, and a lazy load there is one round trip to the database
+    # for every opportunity in the page: on a remote database that is what
+    # made the review queue take more than ten seconds to open.
     if sort == "quality":
-        statement = select(Opportunity).order_by(
+        statement = select(Opportunity).options(
+            selectinload(Opportunity.publications)
+        ).order_by(
             Opportunity.quality_score.desc(), Opportunity.id.desc()
         )
     elif sort == "updated":
-        statement = select(Opportunity).order_by(
+        statement = select(Opportunity).options(
+            selectinload(Opportunity.publications)
+        ).order_by(
             Opportunity.reviewed_at.desc().nullslast(), Opportunity.id.desc()
         )
     else:
-        statement = select(Opportunity).order_by(Opportunity.id.desc())
+        statement = select(Opportunity).options(
+            selectinload(Opportunity.publications)
+        ).order_by(Opportunity.id.desc())
 
     published_subquery = (
         select(Publication.opportunity_id)
