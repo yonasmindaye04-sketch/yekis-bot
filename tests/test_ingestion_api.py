@@ -115,3 +115,42 @@ def test_missing_source_returns_404(client):
 def test_posts_pagination_is_bounded(client):
     assert client.get("/api/v1/ingestion/posts", params={"limit": 201}).status_code == 422
     assert client.get("/api/v1/ingestion/posts", params={"limit": 0}).status_code == 422
+
+
+def test_trigger_collection_scheduled_without_token(collector_client):
+    from unittest.mock import patch
+
+    from app.config import get_settings
+
+    settings = get_settings()
+    with patch.object(settings, "telegram_api_id", 0), patch.object(settings, "github_token", ""):
+        res = collector_client.post("/api/v1/ingestion/collect")
+        assert res.status_code == 200
+        data = res.json()
+        assert isinstance(data, list)
+        assert data[0]["status"] == "cloud_worker_scheduled"
+
+
+def test_trigger_collection_dispatches_with_github_token(collector_client):
+    from unittest.mock import MagicMock, patch
+
+    from app.config import get_settings
+
+    settings = get_settings()
+    mock_client = MagicMock()
+    mock_resp = MagicMock()
+    mock_resp.status_code = 204
+    mock_client.post.return_value = mock_resp
+    mock_client.__enter__.return_value = mock_client
+
+    with (
+        patch.object(settings, "telegram_api_id", 0),
+        patch.object(settings, "github_token", "fake-gh-token"),
+        patch("app.routers.ingestion.httpx.Client", return_value=mock_client),
+    ):
+        res = collector_client.post("/api/v1/ingestion/collect")
+        assert res.status_code == 200
+        data = res.json()
+        assert data[0]["status"] == "cloud_worker_dispatched"
+        assert "dispatched" in data[0]["message"].lower()
+        mock_client.post.assert_called_once()

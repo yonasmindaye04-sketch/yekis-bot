@@ -411,7 +411,7 @@ Look at:
 
 ### Posts that are too old to matter
 
-The channels carry years of history. Two rules keep that history out of the
+The channels carry years of history. Three rules keep that history out of the
 queue:
 
 - `COLLECTION_MAX_POST_AGE_DAYS` (default 30) - a post published longer ago
@@ -420,6 +420,11 @@ queue:
 - the stale sweep - a post that is already in the queue and is older than
   `AUTONOMY_STALE_AFTER_HOURS` is closed automatically, with a review event
   written for the audit trail.
+- the fast-forward - when the checkpoint is far behind the newest message of
+  the channel and the whole gap is older than the age limit, the collector
+  jumps straight to the newest messages instead of walking the history one
+  batch at a time. Without it, a channel with thousands of old messages
+  needs hundreds of runs to reach the posts of today.
 
 The age of a post is the date it was **published in the channel**, not the
 day it was scraped. That date is stored on `collected_posts.published_at`.

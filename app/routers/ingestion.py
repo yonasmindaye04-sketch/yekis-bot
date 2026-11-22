@@ -1,3 +1,7 @@
+import logging
+import os
+
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -7,6 +11,8 @@ from app.models import CollectedPost
 from app.schemas import ManualIngestion, OpportunityRead, PostRead
 from app.security.auth import require_role
 from app.services.ingestion import IngestionError, ingest_post
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/ingestion", tags=["ingestion"])
 
@@ -52,9 +58,40 @@ async def trigger_collection(
     # In split deployment, Vercel serverless runs the API while GitHub Actions runs the scraper.
     # If Telegram credentials are not present on this host, do NOT fail the sources in the DB.
     if not settings.telegram_api_id or not settings.telegram_api_hash:
-        github_url = (
-            "https://github.com/yonasmindaye04-sketch/yekis-bot/actions/workflows/collector.yml"
-        )
+        token = settings.github_token or os.environ.get("GITHUB_TOKEN") or ""
+        if token:
+            repo = settings.github_repository or "yonasmindaye04-sketch/yekis-bot"
+            wf = settings.github_workflow_id or "collector.yml"
+            dispatch_url = f"https://api.github.com/repos/{repo}/actions/workflows/{wf}/dispatches"
+            headers = {
+                "Authorization": f"Bearer {token}",
+                "Accept": "application/vnd.github+json",
+                "X-GitHub-Api-Version": "2022-11-28",
+            }
+            try:
+                with httpx.Client(timeout=10.0) as client:
+                    resp = client.post(dispatch_url, headers=headers, json={"ref": "main"})
+                    if resp.status_code == 204:
+                        return [
+                            {
+                                "source_id": 0,
+                                "status": "cloud_worker_dispatched",
+                                "fetched": 0,
+                                "ingested": 0,
+                                "duplicates": 0,
+                                "error": None,
+                                "message": (
+                                    "Scraper dispatched to GitHub Actions. "
+                                    "New jobs will appear shortly."
+                                ),
+                            }
+                        ]
+                    logger.warning(
+                        "GitHub workflow dispatch failed: %s %s", resp.status_code, resp.text[:200]
+                    )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("GitHub workflow dispatch error: %s", exc)
+
         return [
             {
                 "source_id": 0,
@@ -64,10 +101,9 @@ async def trigger_collection(
                 "duplicates": 0,
                 "error": None,
                 "message": (
-                    "Live scraping runs on hourly GitHub Actions runners. "
-                    "Visit GitHub Actions to trigger an instant run."
+                    "Scraper runs automatically on schedule in GitHub Actions. "
+                    "Refreshed review queue."
                 ),
-                "actions_url": github_url,
             }
         ]
 

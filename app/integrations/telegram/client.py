@@ -14,7 +14,7 @@ git-ignored, and is never logged.
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from app.config import Settings
@@ -71,7 +71,10 @@ class TelethonClient:
         return self._client
 
     async def fetch_messages(
-        self, channel: str, min_id: int, limit: int
+        self, channel: str,
+        min_id: int,
+        limit: int,
+        max_age_days: int | None = None,
     ) -> list[ChannelMessage]:
         client = await self._ensure_client()
         reference = channel_reference(channel)
@@ -82,6 +85,45 @@ class TelethonClient:
         # window than the caller asked for. Otherwise a small limit can be
         # consumed entirely by empty posts and yield nothing.
         window = max(limit * 3, limit + 20)
+
+        # The channels carry years of history. Walking it one batch at a time
+        # would take hundreds of runs to reach the posts of today, and every
+        # message in between is too old to be worth anything. When the gap
+        # between the checkpoint and the newest messages is entirely older
+        # than the age limit, the collector jumps to the newest messages and
+        # continues from there.
+        fast_forward = False
+        if max_age_days and min_id > 0:
+            newest, iterated = await self._newest_messages(entity, limit=window)
+            newest_fresh = [message for message in newest if message.message_id > min_id]
+            if newest_fresh:
+                # The gap is the messages between the checkpoint and the
+                # oldest message of the newest window. One sample from the
+                # gap decides whether the gap is old, because the message
+                # ids of a channel increase with time.
+                oldest_in_window = min(message.message_id for message in newest)
+                if min_id < oldest_in_window:
+                    below = await self._message_below(entity, offset=iterated)
+                    if (
+                        below is not None
+                        and below.message_id > min_id
+                        and below.posted_at is not None
+                        and below.posted_at < datetime.now(UTC)
+                        - timedelta(days=max_age_days)
+                    ):
+                        fast_forward = True
+                        ordered = sorted(newest_fresh, key=lambda message: message.message_id)
+                        skipped = oldest_in_window - min_id
+                        logger.info(
+                            "telegram fast-forward channel=%s checkpoint=%s newest=%s "
+                            "skipped %s old messages",
+                            reference,
+                            min_id,
+                            ordered[-1].message_id if ordered else None,
+                            skipped,
+                        )
+                        return ordered[-limit:]
+
         # reverse=True keeps oldest-first so checkpoints move monotonically.
         try:
             async for message in client.iter_messages(
@@ -109,9 +151,52 @@ class TelethonClient:
                 ) from exc
             raise
         logger.info(
-            "telegram fetch channel=%s min_id=%s fetched=%s", reference, min_id, len(collected)
+            "telegram fetch channel=%s min_id=%s fetched=%s fast_forward=%s",
+            reference,
+            min_id,
+            len(collected),
+            fast_forward,
         )
         return collected
+
+    async def _newest_messages(self, entity, limit: int) -> tuple[list[ChannelMessage], int]:
+        """The newest messages of a channel, newest first.
+
+        Returns the messages and how many messages were read, so the caller
+        can ask for the message that sits right below the window.
+        """
+        messages: list[ChannelMessage] = []
+        iterated = 0
+        client = await self._ensure_client()
+        async for message in client.iter_messages(entity, limit=limit, reverse=False):
+            iterated += 1
+            text = (message.message or "").strip()
+            if not text:
+                continue
+            messages.append(
+                ChannelMessage(
+                    message_id=int(message.id),
+                    text=text,
+                    url=None,
+                    posted_at=message.date,
+                )
+            )
+        return messages, iterated
+
+    async def _message_below(self, entity, offset: int) -> ChannelMessage | None:
+        """The first message below the newest window, used to date the gap."""
+        client = await self._ensure_client()
+        async for message in client.iter_messages(entity, offset=offset, limit=1, reverse=False):
+            text = (message.message or "").strip()
+            if not text:
+                continue
+            return ChannelMessage(
+                message_id=int(message.id),
+                text=text,
+                url=None,
+                posted_at=message.date,
+            )
+        return None
 
     async def close(self) -> None:
         if self._client is not None:
@@ -160,7 +245,12 @@ class FakeTelegramClient:
         self._fail_with = fail_with
         self.calls: list[tuple[str, int, int]] = []
 
-    async def fetch_messages(self, channel: str, min_id: int, limit: int) -> list[ChannelMessage]:
+    async def fetch_messages(
+        self, channel: str,
+        min_id: int,
+        limit: int,
+        max_age_days: int | None = None,
+    ) -> list[ChannelMessage]:
         self.calls.append((channel, min_id, limit))
         if self._fail_with is not None:
             raise self._fail_with

@@ -158,6 +158,11 @@ class Settings(BaseSettings):
     admin_alert_chat_id: str = ""
     admin_alert_batch_size: int = 10
 
+    # GitHub Actions Integration (optional on-demand trigger)
+    github_token: str = ""
+    github_repository: str = "yonasmindaye04-sketch/yekis-bot"
+    github_workflow_id: str = "collector.yml"
+
     # Marketplace Sync & Webhook
     marketplace_sync_enabled: bool = False
     marketplace_webhook_url: str = ""

@@ -101,7 +101,7 @@ async def collect_source(
 
     try:
         messages: list[ChannelMessage] = await client.fetch_messages(
-            source.source_url, min_id=min_id, limit=fetch_limit
+            source.source_url, min_id=min_id, limit=fetch_limit, max_age_days=max_age_days
         )
         result = CollectorResult(source_id, "collected", fetched=len(messages))
         highest = min_id
