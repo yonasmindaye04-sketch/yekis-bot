@@ -3,14 +3,48 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import sys
+import time
 from datetime import UTC, datetime
+from pathlib import Path
 
 from app.config import settings
 from app.db import SessionLocal
 from app.integrations.telegram.publisher import TelethonPublisher
 from app.services.publishing import publish_due
 from app.worker.tasks import collect_job
+
+
+def _write_step_summary(summary: dict[str, object]) -> None:
+    """Write the run summary where GitHub Actions shows it.
+
+    A green workflow run that says nothing is the reason a failing pipeline
+    went unnoticed for days. The summary states what the run actually did.
+    """
+    lines = [
+        "## Yekis collector run",
+        "",
+        f"- mode: {summary.get('mode')}",
+        f"- channel: {summary.get('channel') or 'not set'}",
+        f"- opportunities evaluated: {summary.get('evaluated')}",
+        f"- decisions: {summary.get('decisions') or 'none'}",
+        f"- published: {summary.get('published')}",
+    ]
+    blocked = str(summary.get("blocked") or "")
+    lines.append(f"- publishing blocked: {blocked or 'no'}")
+    text = "\n".join(lines) + "\n"
+
+    print("Run summary:")
+    for line in lines[2:]:
+        print("  " + line[2:])
+
+    path = os.environ.get("GITHUB_STEP_SUMMARY")
+    if path:
+        try:
+            Path(path).write_text(text, encoding="utf-8")
+        except OSError as exc:  # pragma: no cover - depends on the runner
+            print(f"(could not write the step summary: {exc})")
 
 
 def main() -> int:
@@ -23,7 +57,9 @@ def main() -> int:
         if outcome.value:
             print(f"Outcome details: {outcome.value}")
 
-        # 1.5 Auto-reject closed/filled opportunities from active review queues
+        # 1.5 Auto-reject closed opportunities, and close the posts that are
+        # too old to be actionable. Both belong to the scheduled job: the read
+        # endpoints must not write.
         try:
             from app.services.review import cleanup_closed_opportunities
 
@@ -32,6 +68,16 @@ def main() -> int:
                 print(f"Auto-rejected {len(closed_ids)} closed opportunities: {closed_ids}")
         except Exception as clean_exc:
             print(f"Warning: closed opportunities cleanup encountered an issue: {clean_exc}")
+
+        stale_ids: list[int] = []
+        try:
+            from app.services.autonomy import sweep_stale_opportunities
+
+            stale_ids = sweep_stale_opportunities(db, settings=settings)
+            if stale_ids:
+                print(f"Closed {len(stale_ids)} stale opportunities (too old to act on).")
+        except Exception as stale_exc:
+            print(f"Warning: stale opportunity sweep encountered an issue: {stale_exc}")
 
         # 2. Check for due / approved publications to broadcast
         print("Checking for due/approved broadcasts...")
@@ -61,11 +107,20 @@ def main() -> int:
             )
 
             config = resolve_config(db, settings)
+            summary: dict[str, object] = {
+                "mode": config.mode,
+                "channel": config.channel or "",
+                "evaluated": 0,
+                "decisions": {},
+                "published": 0,
+                "blocked": "",
+            }
             if config.enabled:
                 # Shadow mode records what the engine would approve. The
                 # supervised and the production modes additionally publish.
                 will_publish = config.mode in ("supervised", "production")
                 blocked = publishing_blocked(db, config, datetime.now(UTC))
+                summary["blocked"] = blocked or ""
                 if will_publish and blocked:
                     print(f"Autonomy is enabled but publishing is blocked: {blocked}")
                 else:
@@ -73,11 +128,19 @@ def main() -> int:
                         f"Autonomy active (mode={config.mode}, "
                         f"channel={config.channel}): evaluating pending opportunities..."
                     )
+                    budget = settings.autonomy_evaluation_time_budget_seconds
+                    deadline = time.monotonic() + budget if budget > 0 else None
                     outcomes = evaluate_pending_opportunities(
                         db,
                         settings=settings,
                         limit=settings.autonomy_evaluate_limit,
+                        deadline=deadline,
                     )
+                    counts: dict[str, int] = {}
+                    for item in outcomes:
+                        counts[item.decision] = counts.get(item.decision, 0) + 1
+                    summary["evaluated"] = len(outcomes)
+                    summary["decisions"] = counts
                     print(
                         f"Evaluated {len(outcomes)} opportunities: "
                         f"{[o.decision for o in outcomes]}"
@@ -95,12 +158,14 @@ def main() -> int:
                             await pub.close()
 
                     auto_res = asyncio.run(_auto_publish())
+                    summary["published"] = len(auto_res.get("published", []))
                     print(f"Autonomous publish cycle result: {auto_res}")
             else:
                 print(
                     "Autonomy inactive (enabled=False). Enable it from the admin "
                     "dashboard or with AUTONOMY_ENABLED=true."
                 )
+            _write_step_summary(summary)
         except Exception as auto_exc:
             print(
                 f"ERROR: autonomy cycle failed and nothing was published: {auto_exc}",

@@ -128,7 +128,16 @@ class Settings(BaseSettings):
     # Maximum number of opportunities the scheduled job classifies in one run.
     # A model call can take a minute or more, so the batch has to stay small
     # enough to finish inside the job timeout.
-    autonomy_evaluate_limit: int = 5
+    autonomy_evaluate_limit: int = 8
+    # How long an opportunity waits before the cycle looks at it again. The
+    # first attempt classifies it; a later attempt re-tries a post that could
+    # not be classified because the model was unavailable.
+    autonomy_evaluation_retry_seconds: int = 21600
+    # How long an opportunity stays actionable. An older post is closed
+    # automatically instead of waiting for a human forever.
+    autonomy_stale_after_hours: int = 720
+    # Wall clock budget for the evaluation phase of a scheduled run.
+    autonomy_evaluation_time_budget_seconds: int = 1200
 
     # Wall clock budget for the collection phase of a scheduled run. Each
     # ingested post can cost one model call, so without a budget a backlog of

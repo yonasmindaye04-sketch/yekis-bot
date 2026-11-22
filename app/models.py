@@ -108,6 +108,15 @@ class Opportunity(Base):
     risk_level: Mapped[str] = mapped_column(String(20), default="none", index=True)
     risk_assessment: Mapped[dict] = mapped_column(JSON, default=dict)
 
+    # --- Autonomy evaluation tracking -------------------------------------
+    # The autonomy cycle must not evaluate the same opportunity in every run.
+    # `last_evaluated_at` is NULL until the first evaluation, and
+    # `evaluation_attempts` counts the tries.
+    last_evaluated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), index=True
+    )
+    evaluation_attempts: Mapped[int] = mapped_column(Integer, default=0)
+
     # --- Approval record --------------------------------------------------
     # approval_method is "manual" for a human decision and "auto" for a
     # decision taken by the autonomy engine.

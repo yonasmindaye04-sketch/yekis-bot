@@ -19,6 +19,7 @@ opportunity to a Telegram channel that the owner has explicitly allowlisted.
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
@@ -384,6 +385,11 @@ def evaluate_opportunity(
         text, provider=provider, threshold=config.threshold, use_ai=use_ai
     )
     apply_classification(opportunity, result)
+
+    # Record that this opportunity was evaluated. Without it the next run
+    # would pick it again and the queue would never move.
+    opportunity.last_evaluated_at = now
+    opportunity.evaluation_attempts = (opportunity.evaluation_attempts or 0) + 1
 
     from_status = opportunity.review_status
     decision, reason, details = _decide_for_autonomy(db, opportunity, result, config)
@@ -788,18 +794,112 @@ def recent_decisions(db: Session, limit: int = 50) -> list[AutonomyDecision]:
     )
 
 
-def opportunities_pending_evaluation(db: Session, limit: int = 50) -> list[Opportunity]:
-    return list(
+def opportunities_pending_evaluation(
+    db: Session,
+    limit: int = 50,
+    *,
+    now: datetime | None = None,
+    settings=default_settings,
+) -> list[Opportunity]:
+    """Return the opportunities the autonomy cycle should look at next.
+
+    The selection has to make progress. It used to take the oldest rows that
+    were still waiting, which meant the same handful of opportunities was
+    evaluated in every single run: they kept their review status, they never
+    got an approval, and they consumed the whole model budget, so no new post
+    was ever classified.
+
+    Three rules keep the queue moving:
+
+    * an opportunity that has never been evaluated comes first, newest first,
+      because a fresh post is the only one worth publishing;
+    * an opportunity that was evaluated is only offered again after the retry
+      window, so an opportunity that could not be classified because the model
+      was unavailable gets a second chance, but not every hour;
+    * an opportunity that is too old to be actionable is left out of the model
+      budget entirely. It is closed by ``sweep_stale_opportunities`` instead.
+    """
+    now = now or datetime.now(UTC)
+    retry_after = timedelta(seconds=max(0, int(settings.autonomy_evaluation_retry_seconds)))
+    stale_before = now - timedelta(hours=max(0, int(settings.autonomy_stale_after_hours)))
+
+    statement = (
+        select(Opportunity)
+        .where(
+            Opportunity.review_status.in_(("pending_review", "needs_review")),
+            Opportunity.approval_method.is_(None),
+            # A post that has been sitting for months is not an opportunity
+            # anybody can act on any more.
+            Opportunity.created_at >= stale_before,
+        )
+        .where(
+            (Opportunity.last_evaluated_at.is_(None))
+            | (Opportunity.last_evaluated_at <= now - retry_after)
+        )
+        .order_by(Opportunity.last_evaluated_at.asc().nullsfirst(), Opportunity.id.desc())
+        .limit(limit)
+    )
+    return list(db.scalars(statement).all())
+
+
+def sweep_stale_opportunities(
+    db: Session,
+    *,
+    actor: str = "system:autonomy",
+    now: datetime | None = None,
+    settings=default_settings,
+) -> list[int]:
+    """Close the opportunities that are too old to be actionable.
+
+    A post that entered the queue months ago is not worth a human decision
+    and it is not worth a model call either. Closing it keeps the review
+    queue honest: what is left in it can still be acted on.
+    """
+    now = now or datetime.now(UTC)
+    stale_before = now - timedelta(hours=max(0, int(settings.autonomy_stale_after_hours)))
+    if stale_before >= now:
+        return []
+
+    candidates = list(
         db.scalars(
             select(Opportunity)
             .where(
                 Opportunity.review_status.in_(("pending_review", "needs_review")),
                 Opportunity.approval_method.is_(None),
+                Opportunity.created_at < stale_before,
             )
-            .order_by(Opportunity.id)
-            .limit(limit)
         ).all()
     )
+    if not candidates:
+        return []
+
+    closed_ids: list[int] = []
+    for opportunity in candidates:
+        from_status = opportunity.review_status
+        opportunity.review_status = "rejected"
+        opportunity.approval_method = "auto"
+        opportunity.approval_reason = (
+            "The post is too old to be actionable and was closed automatically. "
+            "Human review of stale posts was removed to keep the queue useful."
+        )
+        opportunity.is_publishable = False
+        opportunity.is_genuine_opportunity = False
+        db.add(
+            ReviewEvent(
+                opportunity_id=opportunity.id,
+                actor=actor,
+                event_type="auto_rejection",
+                from_status=from_status,
+                to_status="rejected",
+                note="Auto-rejected: the post is older than the actionable window",
+                created_at=now,
+            )
+        )
+        closed_ids.append(opportunity.id)
+
+    if closed_ids:
+        db.commit()
+    return closed_ids
 
 
 async def run_autonomous_publish_cycle(
@@ -923,11 +1023,23 @@ def evaluate_pending_opportunities(
     use_ai: bool = True,
     settings=default_settings,
     limit: int = 50,
+    deadline: float | None = None,
 ) -> list[AutonomyOutcome]:
-    """Evaluate every opportunity that is still waiting for a decision."""
+    """Evaluate every opportunity that is still waiting for a decision.
+
+    ``deadline`` is a monotonic timestamp. The evaluation stops when it is
+    reached, so a slow model can never push the scheduled job past its
+    timeout: the rest of the batch is picked up by the next run.
+    """
     config = config or resolve_config(db, settings)
     outcomes: list[AutonomyOutcome] = []
-    for opportunity in opportunities_pending_evaluation(db, limit=limit):
+    now = datetime.now(UTC)
+    for opportunity in opportunities_pending_evaluation(
+        db, limit=limit, now=now, settings=settings
+    ):
+        if deadline is not None and time.monotonic() > deadline:
+            logger.info("the evaluation budget is exhausted; stopping the batch")
+            break
         outcomes.append(
             evaluate_opportunity(
                 db,

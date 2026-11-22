@@ -48,7 +48,15 @@ def test_blank_environment_values_fall_back_to_the_defaults(monkeypatch):
 
 def test_evaluate_limit_has_a_safe_default():
     settings = Settings(_env_file=None, database_url="sqlite+pysqlite:///:memory:")
-    assert settings.autonomy_evaluate_limit == 5
+    assert settings.autonomy_evaluate_limit == 8
+    # The batch size is an upper bound; the wall clock budget is what really
+    # keeps the scheduled job inside its timeout.
+    assert settings.autonomy_evaluation_time_budget_seconds > 0
+    # An opportunity is only looked at again after the retry window, so a
+    # queue that cannot be classified in one run still makes progress.
+    assert settings.autonomy_evaluation_retry_seconds > 0
+    # Posts that nobody can act on any more are closed instead of waiting.
+    assert settings.autonomy_stale_after_hours > 0
 
 
 def test_overview_reports_why_nothing_is_published(db_session):

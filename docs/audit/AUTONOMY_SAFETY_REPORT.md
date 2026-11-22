@@ -16,7 +16,7 @@ activated by this branch.
 | 2 | A post only qualifies when there is evidence of an offer | `app/services/classification/deterministic.py` | `_has_offer_evidence()` |
 | 3 | The deterministic risk engine has the final word | `app/services/classification/risk.py`, `pipeline._decide()` | the model can only raise the risk level |
 | 4 | Automatic approval needs a publishable classification **and** confidence at or above the threshold | `app/services/classification/pipeline.py` | `_decide()` |
-| 5 | Without a second opinion (no model configured) nothing can be auto-approved | `pipeline.classify_post()` | confidence is capped at `0.90` |
+| 5 | Without a second opinion (no model configured) nothing can be auto-approved | `pipeline.classify_post()` | the confidence is capped below the configured threshold |
 | 6 | Only approved, active sources may be published | `autonomy._source_allowed()` | `eligible_publications()`, `recheck_eligibility()` |
 | 7 | Only approved job categories may be published | `autonomy._category_allowed()` | same |
 | 8 | A duplicate (same content hash) is never published twice | `autonomy._is_duplicate()` | same |
@@ -26,6 +26,7 @@ activated by this branch.
 | 12 | A scheduled autonomous publication is cancelled when the opportunity is no longer approved | `publishing.publish_publication()` | status becomes `cancelled` |
 | 13 | An uncertain `sending` state is never blindly resent | `publishing.publish_publication()` | `PublicationUnknown` |
 | 14 | The destination channel must be allowlisted | `publishing.validate_channel()` | fails closed |
+| 14a | The rule engine can veto the model, but it cannot outvote it by being unsure about the wording | `pipeline._merged_confidence()` | a rule verdict that contradicts the model stands; a rule engine that simply did not recognise the wording does not lower the model's confidence |
 | 15 | Every automatic decision is recorded, append only | `autonomy_decisions`, `review_events` | no update or delete endpoint exists |
 | 16 | A human can override any automatic decision, and the override is audited | `app/services/review.py` | event type `manual_override` |
 | 17 | Prompt injection in a post flags the post for human review only | `risk.py` | `prompt_injection` never auto-approves |
@@ -162,6 +163,28 @@ publishing immediately from the dashboard (set *Autonomous Publishing* to
 
 The dashboard overrides win over the environment. The environment provides the
 defaults for a fresh installation.
+
+### 4.2.1 How the autonomy cycle makes progress
+
+The cycle only classifies what it has not classified yet. This sounds
+obvious, but it was the defect that stopped the whole pipeline: the selection
+took the **oldest** waiting opportunities, they never left the queue (a
+human-review decision keeps the post in `needs_review` and leaves
+`approval_method` empty), so every run decided the same handful of posts
+again and again. The model budget was spent on the same posts, no new post was
+ever classified, and the backlog grew every hour.
+
+The rules now:
+
+| Rule | Setting | Meaning |
+|---|---|---|
+| Never evaluated first, newest first | - | A fresh post is the only one worth publishing. |
+| Evaluated posts are only offered again later | `AUTONOMY_EVALUATION_RETRY_SECONDS` (6h) | A post that could not be classified because the model was unavailable gets a second chance, not a new decision every hour. |
+| The batch is bounded in time | `AUTONOMY_EVALUATION_TIME_BUDGET_SECONDS` (20 min) | A slow model can never push the scheduled job past its timeout. |
+| Old posts are closed, not queued | `AUTONOMY_STALE_AFTER_HOURS` (30 days) | A post nobody can act on any more costs no model call and no human decision. |
+
+Every evaluation records `last_evaluated_at` and `evaluation_attempts` on the
+opportunity, so the progress of the queue is visible in the database.
 
 ## 4.3 Enabling automatic publishing on the scheduled job (the actual fix)
 

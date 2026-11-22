@@ -135,6 +135,12 @@ jobs:
           AUTONOMY_DAILY_PUBLISH_LIMIT: ${{ secrets.AUTONOMY_DAILY_PUBLISH_LIMIT }}
           AUTONOMY_MIN_INTERVAL_SECONDS: ${{ secrets.AUTONOMY_MIN_INTERVAL_SECONDS }}
           AUTONOMY_EVALUATE_LIMIT: ${{ secrets.AUTONOMY_EVALUATE_LIMIT }}
+          # How long an opportunity waits before the cycle looks at it again,
+          # and how long an opportunity stays actionable. An older post is
+          # closed automatically instead of waiting for a human.
+          AUTONOMY_EVALUATION_RETRY_SECONDS: ${{ secrets.AUTONOMY_EVALUATION_RETRY_SECONDS }}
+          AUTONOMY_STALE_AFTER_HOURS: ${{ secrets.AUTONOMY_STALE_AFTER_HOURS }}
+          AUTONOMY_EVALUATION_TIME_BUDGET_SECONDS: ${{ secrets.AUTONOMY_EVALUATION_TIME_BUDGET_SECONDS }}
           PUBLISHING_ENABLED: "true"
           # Must contain the channel the dashboard publishes to. The API side
           # and this job read the allowlist from their own environment, so
@@ -142,3 +148,12 @@ jobs:
           PUBLISHING_ALLOWED_CHANNELS: ${{ secrets.PUBLISHING_ALLOWED_CHANNELS || '@yekis_channel' }}
         run: |
           python -m scripts.run_collection
+
+      # The run summary states what the run actually did. A green workflow
+      # run that says nothing is how a stalled pipeline stays unnoticed.
+      - name: Run Summary
+        if: always()
+        run: |
+          echo "### Yekis collector" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Collection, classification and publishing happen in the step above." >> "$GITHUB_STEP_SUMMARY"

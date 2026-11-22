@@ -591,6 +591,31 @@ Autonomous approval is **off by default** and defaults to `shadow` mode. The
 full safety model is in
 [`docs/audit/AUTONOMY_SAFETY_REPORT.md`](audit/AUTONOMY_SAFETY_REPORT.md).
 
+### The queue has to move
+
+The autonomy cycle classifies the posts it has not classified yet. It keeps
+track of that with two columns on the opportunity:
+
+- `last_evaluated_at` - when the cycle last looked at the post (NULL = never);
+- `evaluation_attempts` - how many times it tried.
+
+A post is offered again only after `AUTONOMY_EVALUATION_RETRY_SECONDS` (6
+hours by default), so a post that could not be classified because the model
+was unavailable gets a second chance instead of a new decision every hour.
+Posts older than `AUTONOMY_STALE_AFTER_HOURS` (30 days by default) are closed
+automatically: they are not worth a model call and not worth a human
+decision.
+
+If the backlog does not shrink, look at these three numbers first:
+
+```sql
+SELECT count(*), min(created_at), max(created_at)
+FROM opportunities
+WHERE review_status IN ('pending_review', 'needs_review')
+  AND approval_method IS NULL
+  AND (last_evaluated_at IS NULL OR last_evaluated_at < now() - interval '6 hours');
+```
+
 ### Check the current state
 
 ```bash

@@ -74,6 +74,34 @@ SEEKING = (
     r"virtual assistant|illustrator|photographer)\s+(?:is\s+|are\s+)?needed\b"),
     # Amharic: "I need", "we need", "whoever needs".
     r"(?:\bያስፈልጋለሁ\b|\bያስፈልጋለን\b|\bእየፈልጋለሁ\b|\bየሚፈልጉ\b)",
+    # First person and informal wording. "I need a financial analyst" is an
+    # offer, exactly like "we are looking for a financial analyst"; the
+    # difference is grammar, not intent. The object has to be a person or a
+    # role, so "I need to know how to write a CV" is still not an offer.
+    (r"\bi (?:need|require|am looking for|am searching for|would like to hire|"
+     r"want to hire|am looking to hire)\s+(?:a|an|one|someone|somebody|anyone|"
+     r"you|a\s+f?reelancer)\s+(?:[a-z][a-z/-]*\s+){0,3}?"
+     r"(?:developer|designer|engineer|analyst|writer|editor|translator|marketer|"
+     r"consultant|expert|specialist|freelancer|photographer|videographer|"
+     r"illustrator|accountant|bookkeeper|community manager|virtual assistant|"
+     r"assistant|copywriter|programmer|technician|researcher|devops|architect)\b"),
+    # "we are looking for", "urgently looking for", "kindly looking for".
+    (r"\bwe(?:'re| are)?\s+(?:urgently|kindly|actively|currently|immediately)?\s*"
+     r"(?:looking|searching|hiring)\s+for\s+(?:a|an|one)?\s*"
+     r"(?:[a-z][a-z/-]*\s+){0,3}?"
+     r"(?:developer|designer|engineer|analyst|writer|editor|translator|marketer|"
+     r"consultant|expert|specialist|freelancer|photographer|videographer|"
+     r"illustrator|accountant|bookkeeper|virtual assistant|programmer|"
+     r"researcher|person|people|someone|freelancers|candidates|professionals)\b"),
+    # "we are looking for someone to ...", "looking for a person to ...".
+    (r"\b(?:looking|searching)\s+for\s+(?:a|an|one)?\s*"
+     r"(?:[a-z][a-z/-]*\s+){0,3}?(?:person|people|someone|somebody|female|male)\s+"
+     r"(?:to|who|with|that|able|experienced)\b"),
+    # Vacancy and opening headlines: "Vacancy: Marketing Officer".
+    (r"\b(?:vacancy|vacancies|job (?:opening|opportunity|vacancy|offer|post)|"
+     r"employment opportunity|call for (?:applicants|candidates|proposals|bids)|"
+     r"opportunity (?:available|open)|now (?:hiring|recruiting)|"
+     r"we are recruiting|position (?:available|open))\b"),
 )
 
 #: There is a task, a project, or a deliverable.
@@ -102,6 +130,13 @@ APPLICATION = (
     r"profile|rates|references)\b"),
     # Amharic: "send your portfolio", "how to do".
     r"(?:\bእንደት አስረጋግጡ\b|\bያስቀርቡ\b|\bፖርትፎሊዮ\b)",
+    # "send your CV to ...", "drop your cv", "reply to this message".
+    (r"\b(?:send|drop|forward|submit|deliver)\s+(?:me|us|your)?\s*"
+     r"(?:cvs?|resumes?|portfolios?|profiles?|applications?)\s*(?:to|via|at|here)?\b"),
+    (r"\b(?:reply|respond|write)\s+(?:to\s+)?(?:this\s+message|us|me|below|"
+     r"the\s+post)\b"),
+    (r"\b(?:interested|applicants|candidates)\s+(?:should|may|can|must|are\s+"
+     r"(?:invited|requested|encouraged))\b"),
 )
 
 #: Money, rate, or budget language.
@@ -121,6 +156,19 @@ DURATION = (
     r"project|period|assignment|deadline)\b"),
     # Amharic: days, weeks, months.
     r"(?:\bቀናት\b|\bሳምንታት\b|\bወራት\b)",
+    # Month names and ranges: "from mid January to the end of May",
+    # "January - March", "starting February 2027".
+    (r"\b(?:january|february|march|april|may|june|july|august|september|"
+     r"october|november|december)\.?\s+(?:\d{1,2}(?:st|nd|rd|th)?)?\s*"
+     r"(?:to|until|till|thru|through|[-—–])\s*(?:the\s+)?(?:end of\s+|"
+     r"start of\s+|middle of\s+|mid\s+)?(?:january|february|march|april|may|june|"
+     r"july|august|september|october|november|december)\b"),
+    (r"\b(?:from|starting|starting from|beginning)\s+(?:mid|late|early)?\s*"
+     r"(?:january|february|march|april|may|june|july|august|september|october|"
+     r"november|december)\b"),
+    # "for one month", "over three weeks", "a two week period".
+    (r"\bfor\s+(?:a|an|one|two|three|four|five|six|seven|eight|nine|ten|\d{1,2})[- ]"
+     r"(?:day|week|month)s?\b"),
 )
 
 #: A job role is named. This alone is weak evidence, but a role together

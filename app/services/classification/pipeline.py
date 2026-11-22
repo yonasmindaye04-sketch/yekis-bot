@@ -80,6 +80,9 @@ class ClassificationResult:
     risk_level: str = "none"
     risk_flags: list[str] = field(default_factory=list)
     risk_assessment: dict = field(default_factory=dict)
+    # What the rule engine concluded, kept for the audit trail.
+    rules_classification: str | None = None
+    rules_offer_evidence: bool = False
     method: str = "deterministic"
     model_provider: str | None = None
     model_name: str | None = None
@@ -155,6 +158,8 @@ def classify_post(
         rejection_reasons=list(deterministic.reasons),
         risk_level=risk.risk_level,
         risk_flags=list(risk.risk_flags),
+        rules_classification=deterministic.classification,
+        rules_offer_evidence=bool(deterministic.offer_groups),
         risk_assessment={
             "risk_level": risk.risk_level,
             "risk_score": risk.risk_score,
@@ -193,27 +198,39 @@ def classify_post(
             result.classification = ai.classification
             result.engagement_type = ai.engagement_type or result.engagement_type
             result.job_category = ai.job_category
-            result.confidence = min(
-                0.99, ai_confidence * 0.6 + deterministic.confidence * 0.4
-            )
+            result.confidence = _merged_confidence(deterministic, ai_confidence)
             result.evidence.extend(ai.evidence)
             result.rejection_reasons.extend(ai.rejection_reasons)
         else:
             disagreement = True
-            result.classification = _safer_classification(
-                deterministic.classification, ai.classification
-            )
-            result.confidence = min(
-                0.7, max(deterministic.confidence, ai.confidence) * 0.6
-            )
-            result.rejection_reasons.append(
-                "The deterministic classifier and the AI classifier disagree "
-                f"({deterministic.classification} vs {ai.classification}); a human "
-                "must confirm the classification."
-            )
-            result.evidence.append(
-                "Classification disagreement detected between the rule engine and the model"
-            )
+            if deterministic.classification == "closed_or_filled_job":
+                # The source marked the post as closed. A model that reads the
+                # body of the post still sees a job offer in it and calls it an
+                # opportunity - the closed marker has to win, and it has to
+                # close the post instead of sending it to a human.
+                result.classification = "closed_or_filled_job"
+                result.confidence = max(deterministic.confidence, 0.99)
+                result.rejection_reasons.append(
+                    "The source marked the post as closed, filled, or expired; "
+                    "it is closed automatically and is never published."
+                )
+                result.evidence.extend(deterministic.evidence)
+                disagreement = False
+            else:
+                result.classification = _safer_classification(
+                    deterministic.classification, ai.classification
+                )
+                result.confidence = min(
+                    0.7, max(deterministic.confidence, ai.confidence) * 0.6
+                )
+                result.rejection_reasons.append(
+                    "The deterministic classifier and the AI classifier disagree "
+                    f"({deterministic.classification} vs {ai.classification}); a human "
+                    "must confirm the classification."
+                )
+                result.evidence.append(
+                    "Classification disagreement detected between the rule engine and the model"
+                )
 
         # The model may only raise the risk level, never lower it.
         if _risk_level_order(ai.risk_level) > _risk_level_order(result.risk_level):
@@ -227,14 +244,62 @@ def classify_post(
 
     if ai_result is None:
         # Deterministic only: the verdict is capped below the automatic
-        # approval threshold.
-        result.confidence = min(result.confidence, DETERMINISTIC_CONFIDENCE_CAP)
+        # approval threshold. The cap has to follow the configured
+        # threshold, not a fixed number: with a threshold of 0.85 a fixed
+        # cap of 0.90 would let a rule-engine-only post publish itself,
+        # and the whole point of the second opinion is that there is one.
+        cap = min(
+            DETERMINISTIC_CONFIDENCE_CAP, max(0.0, threshold - 0.01)
+        )
+        result.confidence = min(result.confidence, cap)
 
     result.is_genuine_opportunity = is_publishable_classification(result.classification)
     _apply_risk_classification(result)
     result.decision = _decide(result, threshold=threshold, disagreement=disagreement)
     result.is_publishable = result.decision == DECISION_AUTO_APPROVE
     return result
+
+
+def _merged_confidence(deterministic: DeterministicAnalysis, ai_confidence: float) -> float:
+    """Combine the rule engine's confidence with the model's.
+
+    The rule engine counts keyword signals; the model reads the whole post.
+    They are not two equal votes on the same question: the rule engine is a
+    **veto**, the model is the **judgement**.
+
+    Blending them as equal votes was the reason a genuine job post kept
+    landing in human review. A post that says "I need a financial analyst
+    for a consultancy, send your CV to ..." found the seeking and the
+    application signals but no budget and no duration word, so the rules
+    scored it 0.78, and the average with the model's 0.93 was 0.87 - below
+    the threshold, so a real opportunity was never published.
+
+    The rule engine therefore decides *whether it objects*, not *how sure it
+    is*:
+
+    * the rules found a different verdict (a closed marker, a scam shape, a
+      teaching post) - the disagreement stands and a human decides;
+    * the rules found the same kind of evidence as the model - both agree,
+      the confidence is the average of the two, as before;
+    * the rules found the offer but no budget or duration word, or they found
+      nothing at all - they did not object, so the model's confidence stands
+      with a small haircut. A different wording is not a reason to send a
+      genuine opportunity to a human.
+    """
+    offer_groups = set(deterministic.offer_groups)
+    if not offer_groups:
+        # The rules saw no offer at all. The model still leads, but the
+        # verdict keeps a haircut because the rules saw nothing either.
+        return min(0.99, ai_confidence * 0.95)
+
+    detail = offer_groups & {"payment", "duration"}
+    if detail:
+        # The rules confirmed the money and the timing as well.
+        return min(0.99, ai_confidence * 0.6 + deterministic.confidence * 0.4)
+
+    # The rules confirmed an offer without the commercial detail. The model
+    # read the post; the rules only counted words.
+    return min(0.99, ai_confidence)
 
 
 def _apply_risk_classification(result: ClassificationResult) -> None:

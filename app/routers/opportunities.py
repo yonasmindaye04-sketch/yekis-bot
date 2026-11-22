@@ -88,8 +88,6 @@ def list_opportunities(
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
 ):
-    from app.services.review import cleanup_closed_opportunities
-
     # Ordering: newest by default so fresh and updated jobs always arrive at the top
     if sort == "quality":
         statement = select(Opportunity).order_by(
@@ -107,20 +105,21 @@ def list_opportunities(
         .where(Publication.status == "published")
     )
 
+    # The closed-post sweep is a write operation and it belongs to the
+    # scheduled job, not to a read. It used to run inside this endpoint, which
+    # scanned every waiting opportunity on every page load and made the
+    # dashboard wait for more than ten seconds.
     if status in ("actionable", None):
-        cleanup_closed_opportunities(db)
         statement = statement.where(
             Opportunity.review_status.in_(("pending_review", "needs_review"))
         )
         statement = statement.where(Opportunity.classification != "closed_or_filled_job")
         statement = statement.where(Opportunity.id.notin_(published_subquery))
     elif status == "pending_review":
-        cleanup_closed_opportunities(db)
         statement = statement.where(Opportunity.review_status == "pending_review")
         statement = statement.where(Opportunity.classification != "closed_or_filled_job")
         statement = statement.where(Opportunity.id.notin_(published_subquery))
     elif status == "needs_review":
-        cleanup_closed_opportunities(db)
         statement = statement.where(Opportunity.review_status == "needs_review")
         statement = statement.where(Opportunity.classification != "closed_or_filled_job")
         statement = statement.where(Opportunity.id.notin_(published_subquery))
@@ -177,10 +176,6 @@ def queue_summary(db: Session = Depends(get_db)) -> dict:
     waiting in another queue - which is how an operator ends up looking at an
     empty review queue while hundreds of posts still need a decision.
     """
-    from app.services.review import cleanup_closed_opportunities
-
-    cleanup_closed_opportunities(db)
-
     published = select(Publication.opportunity_id).where(
         Publication.status == "published"
     )
