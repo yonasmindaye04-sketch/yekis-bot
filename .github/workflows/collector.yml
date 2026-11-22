@@ -2,8 +2,17 @@ name: Yekis Telegram Collector
 
 on:
   schedule:
-    # Run once every hour at minute 0
-    - cron: '0 * * * *'
+    # GitHub Actions schedules are best effort: a cron entry can be delayed
+    # by hours or skipped entirely when the platform is busy. The measured
+    # gap between two runs of this workflow was eight hours on a '0 * * * *'
+    # schedule, which is why the scraper looked broken.
+    #
+    # Two entries, both deliberately off the hour to avoid the busiest
+    # minute: one every hour, and one every three hours as a safety net for
+    # the runs that are skipped. The workflow is safe to run twice: the
+    # collection is incremental and the publishing is idempotent.
+    - cron: '17 * * * *'
+    - cron: '43 */3 * * *'
   workflow_dispatch: # Allows manual one-click trigger from the GitHub Actions tab anytime!
 
 jobs:

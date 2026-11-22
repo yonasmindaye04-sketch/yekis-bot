@@ -127,8 +127,10 @@ class Settings(BaseSettings):
     autonomous_publish_interval_seconds: int = 120
     # Maximum number of opportunities the scheduled job classifies in one run.
     # A model call can take a minute or more, so the batch has to stay small
-    # enough to finish inside the job timeout.
-    autonomy_evaluate_limit: int = 8
+    # enough to finish inside the job timeout. The scheduled runs are sparse
+    # (GitHub delays cron entries by hours), so every run has to catch up on
+    # a decent batch.
+    autonomy_evaluate_limit: int = 12
     # How long an opportunity waits before the cycle looks at it again. The
     # first attempt classifies it; a later attempt re-tries a post that could
     # not be classified because the model was unavailable.
@@ -137,7 +139,7 @@ class Settings(BaseSettings):
     # automatically instead of waiting for a human forever.
     autonomy_stale_after_hours: int = 720
     # Wall clock budget for the evaluation phase of a scheduled run.
-    autonomy_evaluation_time_budget_seconds: int = 1200
+    autonomy_evaluation_time_budget_seconds: int = 2100
 
     # Wall clock budget for the collection phase of a scheduled run. Each
     # ingested post can cost one model call, so without a budget a backlog of

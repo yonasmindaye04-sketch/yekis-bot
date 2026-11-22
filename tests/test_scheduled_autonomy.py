@@ -48,7 +48,7 @@ def test_blank_environment_values_fall_back_to_the_defaults(monkeypatch):
 
 def test_evaluate_limit_has_a_safe_default():
     settings = Settings(_env_file=None, database_url="sqlite+pysqlite:///:memory:")
-    assert settings.autonomy_evaluate_limit == 8
+    assert settings.autonomy_evaluate_limit == 12
     # The batch size is an upper bound; the wall clock budget is what really
     # keeps the scheduled job inside its timeout.
     assert settings.autonomy_evaluation_time_budget_seconds > 0

@@ -591,6 +591,27 @@ Autonomous approval is **off by default** and defaults to `shadow` mode. The
 full safety model is in
 [`docs/audit/AUTONOMY_SAFETY_REPORT.md`](audit/AUTONOMY_SAFETY_REPORT.md).
 
+### The schedule is best effort
+
+GitHub Actions cron entries are **not** a reliable timer. The measured gap
+between two runs of the collector on an `0 * * * *` schedule was eight hours,
+and several entries were skipped entirely. The workflow therefore carries two
+entries (one hourly, one every three hours as a safety net) and the dashboard
+has a *Collect now* button that triggers it manually.
+
+Consequences for the operator:
+
+- the scraper publishes **when a run happens**, not every hour;
+- a run that is late is not a failed run - the sources show `last_success_at`,
+  which is the real answer to "is the collector alive";
+- the workflow is safe to run twice: the collection is incremental and the
+  publishing is idempotent.
+
+```bash
+curl -H "X-API-Key: $YI_ADMIN_KEY" http://localhost:8100/api/v1/sources
+# last_success_at is the moment of the last successful collection
+```
+
 ### The queue has to move
 
 The autonomy cycle classifies the posts it has not classified yet. It keeps
