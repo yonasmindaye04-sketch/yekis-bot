@@ -89,8 +89,18 @@ def main() -> int:
             finally:
                 await publisher.close()
 
-        published = asyncio.run(_publish())
-        print(f"Broadcast processing complete: {len(published)} items published.")
+        # A failing broadcast must not stop the autonomy cycle below it. The
+        # two are independent: a transient Telegram error used to abort the
+        # whole run before a single opportunity was classified.
+        try:
+            published = asyncio.run(_publish())
+            print(f"Broadcast processing complete: {len(published)} items published.")
+        except Exception as publish_exc:
+            print(
+                f"WARNING: the broadcast step failed ({publish_exc}); "
+                "the autonomy cycle continues.",
+                file=sys.stderr,
+            )
 
         # 3. Autonomous evaluation and auto-publishing cycle
         #
