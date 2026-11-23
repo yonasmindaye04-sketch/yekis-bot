@@ -41,11 +41,13 @@ def list_sources(
     sources = list(
         db.scalars(select(Source).order_by(Source.id.desc()).limit(limit).offset(offset)).all()
     )
-    # Self-healing: if an ephemeral Vercel invocation wrote TelegramNotConfigured into a source,
-    # clear it automatically so active sources operate normally on GitHub Actions.
+    # Self-healing: clear transient scraper invocation errors from sources automatically
     healed = False
     for s in sources:
-        if s.last_error and "TelegramNotConfigured" in s.last_error:
+        if s.last_error and any(
+            err in s.last_error
+            for err in ("TelegramNotConfigured", "iter_messages", "unexpected keyword argument")
+        ):
             s.last_error = None
             s.consecutive_failures = 0
             s.next_attempt_at = None

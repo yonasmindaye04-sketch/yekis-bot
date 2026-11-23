@@ -103,7 +103,9 @@ class TelethonClient:
                 # ids of a channel increase with time.
                 oldest_in_window = min(message.message_id for message in newest)
                 if min_id < oldest_in_window:
-                    below = await self._message_below(entity, offset=iterated)
+                    below = await self._message_below(
+                        entity, offset_id=oldest_in_window, offset=iterated
+                    )
                     if (
                         below is not None
                         and below.message_id > min_id
@@ -183,10 +185,19 @@ class TelethonClient:
             )
         return messages, iterated
 
-    async def _message_below(self, entity, offset: int) -> ChannelMessage | None:
+    async def _message_below(
+        self, entity, *, offset_id: int = 0, offset: int = 0
+    ) -> ChannelMessage | None:
         """The first message below the newest window, used to date the gap."""
         client = await self._ensure_client()
-        async for message in client.iter_messages(entity, offset=offset, limit=1, reverse=False):
+        # Telethon uses offset_id (messages older than offset_id) or add_offset
+        kwargs = {"limit": 1, "reverse": False}
+        if offset_id > 0:
+            kwargs["offset_id"] = offset_id
+        elif offset > 0:
+            kwargs["add_offset"] = offset
+
+        async for message in client.iter_messages(entity, **kwargs):
             text = (message.message or "").strip()
             if not text:
                 continue

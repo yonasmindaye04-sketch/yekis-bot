@@ -70,6 +70,28 @@ def main() -> int:
     print("Starting direct Telegram collection job...")
     db = SessionLocal()
     try:
+        # Pre-collection self-healing: clear transient scraper errors so sources do not stall
+        from sqlalchemy import select
+
+        from app.models import Source
+
+        stalled_sources = list(
+            db.scalars(select(Source).where(Source.last_error.is_not(None))).all()
+        )
+        healed_count = 0
+        for s in stalled_sources:
+            if s.last_error and any(
+                err in s.last_error
+                for err in ("iter_messages", "unexpected keyword argument", "TelegramNotConfigured")
+            ):
+                s.last_error = None
+                s.consecutive_failures = 0
+                s.next_attempt_at = None
+                healed_count += 1
+        if healed_count:
+            db.commit()
+            print(f"Self-healed {healed_count} sources from transient errors.")
+
         # 1. Scrape new messages and ingest opportunities
         outcome = collect_job(db)
         print(f"Collection finished with status: {outcome.status}")

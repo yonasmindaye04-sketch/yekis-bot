@@ -46,7 +46,16 @@ class FakeTelethonClient:
     async def get_entity(self, reference):
         return FakeEntity()
 
-    def iter_messages(self, entity, min_id=0, limit=100, reverse=False, offset=0):
+    def iter_messages(
+        self,
+        entity,
+        min_id=0,
+        limit=100,
+        reverse=False,
+        offset=0,
+        offset_id=0,
+        add_offset=0,
+    ):
         pool = sorted(FakeTelethonClient.messages, key=lambda message: message.id)
 
         async def generator():
@@ -54,7 +63,10 @@ class FakeTelethonClient:
                 candidates = [message for message in pool if message.id > min_id]
             else:
                 candidates = list(reversed(pool))
-                candidates = candidates[offset:]
+                if offset_id > 0:
+                    candidates = [message for message in candidates if message.id < offset_id]
+                offset_val = add_offset or offset
+                candidates = candidates[offset_val:]
             for message in candidates[:limit]:
                 yield message
 
